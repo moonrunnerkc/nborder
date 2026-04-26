@@ -83,7 +83,7 @@ def test_dataflow_graph_records_duplicate_cell_definitions_once_in_symbol_index(
     assert graph.symbol_to_defining_cells == {"value": [0]}
 
 
-def test_dataflow_graph_does_not_resolve_parameter_cell_use_to_itself() -> None:
+def test_dataflow_graph_silences_same_cell_self_assignment() -> None:
     notebook = _notebook_from_sources(
         ("input_path = input_path",),
         tags_by_cell={0: frozenset({"parameters"})},
@@ -91,7 +91,7 @@ def test_dataflow_graph_does_not_resolve_parameter_cell_use_to_itself() -> None:
 
     graph = build_dataflow_graph(notebook)
 
-    assert [unresolved.symbol.name for unresolved in graph.unresolved_uses] == ["input_path"]
+    assert graph.unresolved_uses == []
 
 
 def test_topological_sort_returns_dependency_first_order() -> None:

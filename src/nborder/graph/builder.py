@@ -84,9 +84,7 @@ def _resolve_symbols(
     for cell in notebook.cells:
         cell_symbols = symbols_by_cell[cell.index]
         local_definition_names = {
-            definition.name
-            for definition in cell_symbols.definitions
-            if definition.kind in {"import", "function", "class", "magic"}
+            definition.name for definition in cell_symbols.definitions
         }
         for symbol_use in cell_symbols.uses:
             if symbol_use.name in _ALWAYS_DEFINED_NAMES:

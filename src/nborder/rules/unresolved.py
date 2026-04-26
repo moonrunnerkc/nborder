@@ -59,7 +59,7 @@ def classify_unresolved_uses(graph: DataflowGraph) -> tuple[ClassifiedUse, ...]:
 def _later_definition_cell(graph: DataflowGraph, symbol_use: SymbolUse) -> CellIndex | None:
     definition_cells = graph.symbol_to_defining_cells.get(symbol_use.name, [])
     candidate_cells = [
-        cell_index for cell_index in definition_cells if cell_index >= symbol_use.cell_index
+        cell_index for cell_index in definition_cells if cell_index > symbol_use.cell_index
     ]
     if not candidate_cells:
         return None
