@@ -38,3 +38,6 @@ jobs:
 
       - name: Run pytest
         run: pytest
+
+      - name: Self-test on clean roundtrip fixtures
+        run: nborder check tests/fixtures/roundtrip

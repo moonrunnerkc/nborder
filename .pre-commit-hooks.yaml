@@ -1,0 +1,7 @@
+- id: nborder
+  name: nborder
+  description: Lint Jupyter notebooks for hidden-state and execution-order bugs
+  entry: nborder check
+  language: python
+  types: [jupyter]
+  require_serial: false

@@ -1,0 +1,36 @@
+name: nborder
+description: Lint Jupyter notebooks for hidden-state and execution-order bugs.
+author: Brad Kinnard
+branding:
+  icon: check-circle
+  color: green
+inputs:
+  path:
+    description: Path to scan for notebooks.
+    required: false
+    default: "."
+  fix:
+    description: Apply fixes (true or false).
+    required: false
+    default: "false"
+  select:
+    description: Comma-separated rule codes to enable.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install nborder
+      shell: bash
+      run: pip install nborder
+    - name: Run nborder
+      shell: bash
+      run: |
+        ARGS="check --output-format=github"
+        if [ "${{ inputs.fix }}" = "true" ]; then
+          ARGS="$ARGS --fix"
+        fi
+        if [ -n "${{ inputs.select }}" ]; then
+          ARGS="$ARGS --select=${{ inputs.select }}"
+        fi
+        nborder $ARGS "${{ inputs.path }}"
