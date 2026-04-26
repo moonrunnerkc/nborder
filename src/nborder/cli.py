@@ -13,14 +13,23 @@ from nborder.graph.builder import build_dataflow_graph
 from nborder.parser.models import Notebook
 from nborder.parser.reader import read_notebook
 from nborder.parser.writer import serialize_notebook, write_notebook
-from nborder.reporters.text import format_diagnostic, format_summary
+from nborder.reporters.base import Reporter
+from nborder.reporters.github import GithubReporter
+from nborder.reporters.jsonout import JsonReporter
+from nborder.reporters.sarif import SarifReporter
+from nborder.reporters.text import TextReporter
 from nborder.rules.nb101 import check_non_monotonic_execution_counts
 from nborder.rules.nb102 import check_restart_run_all
 from nborder.rules.nb103 import check_unseeded_stochastic_calls
 from nborder.rules.nb201 import check_use_before_assign
 from nborder.rules.suppression import filter_suppressed_diagnostics
-from nborder.rules.types import Diagnostic
+from nborder.rules.types import Diagnostic, Severity
 from nborder.rules.unresolved import classify_unresolved_uses
+
+_DEFAULT_INCLUDE_LEVELS: frozenset[Severity] = frozenset({"error", "warning"})
+_ALL_INCLUDE_LEVELS: frozenset[Severity] = frozenset({"error", "warning", "info"})
+
+_RULE_DOCS_DIR = Path(__file__).parent.parent.parent / "docs" / "rules"
 
 app = typer.Typer(
     help="Lint Jupyter notebooks for hidden-state and execution-order bugs.",
@@ -31,6 +40,7 @@ app = typer.Typer(
 @app.callback()
 def main() -> None:
     """Run the nborder command-line interface."""
+
 
 @app.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 def check(
@@ -44,27 +54,45 @@ def check(
     ] = False,
     include: Annotated[
         str | None,
-        typer.Option("--include", help="Include optional diagnostic levels, such as info."),
+        typer.Option(
+            "--include",
+            help="Diagnostic levels to include (error, warning, info). Comma-separated.",
+        ),
     ] = None,
+    output_format: Annotated[
+        str,
+        typer.Option(
+            "--output-format",
+            help="Output format: text (default), json, github, or sarif.",
+        ),
+    ] = "text",
+    exit_zero: Annotated[
+        bool,
+        typer.Option("--exit-zero", help="Exit with code 0 even when diagnostics are present."),
+    ] = False,
 ) -> None:
     """Check notebooks for hidden-state and execution-order bugs.
 
     Args:
         paths: Notebook files or directories to check, with manually parsed fix tokens.
         diff: Whether to print the safe-fix diff without writing.
-        include: Optional diagnostic levels to include in output.
+        include: Diagnostic levels to include (comma-separated).
+        output_format: Reporter to use for diagnostic output.
+        exit_zero: Whether to exit with code 0 regardless of diagnostics.
     """
     fix, parsed_paths = _parse_check_tokens(tuple(paths))
     notebooks = tuple(_iter_notebook_paths(parsed_paths))
+    include_levels = _parse_include(include)
+    enabled_fixes = _enabled_fixes(fix, diff)
+    reporter = _select_reporter(output_format)
+
     diagnostics: list[Diagnostic] = []
     fix_outcomes: list[FixOutcome] = []
-    include_info = include == "info"
-    enabled_fixes = _enabled_fixes(fix, diff)
 
     for notebook_path in notebooks:
         config = load_config(notebook_path)
         notebook = read_notebook(notebook_path)
-        notebook_diagnostics = _check_notebook(notebook, config, include_info=include_info)
+        notebook_diagnostics = _check_notebook(notebook, config, include_levels=include_levels)
 
         if enabled_fixes:
             graph = build_dataflow_graph(notebook)
@@ -91,19 +119,38 @@ def check(
                     clear_execution_counts=clear_execution_counts,
                 )
                 notebook = read_notebook(notebook_path)
-                notebook_diagnostics = _check_notebook(notebook, config, include_info=include_info)
+                notebook_diagnostics = _check_notebook(
+                    notebook, config, include_levels=include_levels
+                )
 
-        diagnostics.extend(_visible_diagnostics(notebook_diagnostics, include_info=include_info))
+        diagnostics.extend(
+            _visible_diagnostics(notebook_diagnostics, include_levels=include_levels)
+        )
 
-    for diagnostic in diagnostics:
-        typer.echo(format_diagnostic(diagnostic))
+    visible_fix_outcomes = tuple(fix_outcomes) if enabled_fixes else None
+    rendered_output = reporter.report(tuple(diagnostics), visible_fix_outcomes)
+    if rendered_output:
+        typer.echo(rendered_output)
 
-    if fix_outcomes:
-        typer.echo(_format_fix_outcomes(tuple(fix_outcomes)))
-
-    if diagnostics:
-        typer.echo(format_summary(tuple(diagnostics)))
+    if diagnostics and not exit_zero:
         raise typer.Exit(code=1)
+
+
+@app.command()
+def rule(rule_code: Annotated[str, typer.Argument(help="Rule code (e.g., NB101).")]) -> None:
+    """Print documentation for a single rule."""
+    rule_path = _RULE_DOCS_DIR / f"{rule_code.upper()}.md"
+    if rule_path.exists():
+        typer.echo(rule_path.read_text(encoding="utf-8"))
+        return
+    typer.echo(f"Documentation not yet available for {rule_code.upper()}.")
+
+
+@app.command()
+def config() -> None:
+    """Print the effective configuration as TOML."""
+    effective_config = load_config(Path.cwd())
+    typer.echo(_format_config_toml(effective_config))
 
 
 def _parse_check_tokens(tokens: tuple[str, ...]) -> tuple[str | None, tuple[Path, ...]]:
@@ -135,10 +182,11 @@ def _check_notebook(
     notebook: Notebook,
     config: Config,
     *,
-    include_info: bool,
+    include_levels: frozenset[Severity],
 ) -> tuple[Diagnostic, ...]:
     graph = build_dataflow_graph(notebook)
     classified_uses = classify_unresolved_uses(graph)
+    include_info = "info" in include_levels
     diagnostics = [
         *check_non_monotonic_execution_counts(notebook),
         *check_use_before_assign(notebook, graph, classified_uses),
@@ -156,11 +204,9 @@ def _check_notebook(
 def _visible_diagnostics(
     diagnostics: tuple[Diagnostic, ...],
     *,
-    include_info: bool,
+    include_levels: frozenset[Severity],
 ) -> tuple[Diagnostic, ...]:
-    if include_info:
-        return diagnostics
-    return tuple(diagnostic for diagnostic in diagnostics if diagnostic.severity != "info")
+    return tuple(diagnostic for diagnostic in diagnostics if diagnostic.severity in include_levels)
 
 
 def _enabled_fixes(fix: str | None, diff: bool) -> frozenset[str]:
@@ -171,6 +217,33 @@ def _enabled_fixes(fix: str | None, diff: bool) -> frozenset[str]:
     if fix == "all":
         return frozenset({"reorder", "seeds", "clear-counts"})
     return frozenset(fix_id.strip() for fix_id in fix.split(",") if fix_id.strip())
+
+
+def _parse_include(include: str | None) -> frozenset[Severity]:
+    if include is None:
+        return _DEFAULT_INCLUDE_LEVELS
+    extra_levels: set[Severity] = set()
+    for level_token in include.split(","):
+        normalized = level_token.strip()
+        match normalized:
+            case "error" | "warning" | "info":
+                extra_levels.add(normalized)
+    return _DEFAULT_INCLUDE_LEVELS | extra_levels
+
+
+def _select_reporter(output_format: str) -> Reporter:
+    if output_format == "text":
+        return TextReporter()
+    if output_format == "json":
+        return JsonReporter()
+    if output_format == "github":
+        return GithubReporter()
+    if output_format == "sarif":
+        return SarifReporter()
+    raise typer.BadParameter(
+        f"unknown --output-format value '{output_format}'; "
+        "expected one of: text, json, github, sarif."
+    )
 
 
 def _write_diff(
@@ -199,8 +272,12 @@ def _write_diff(
         typer.echo(diff_line, nl=False)
 
 
-def _format_fix_outcomes(fix_outcomes: tuple[FixOutcome, ...]) -> str:
-    lines = ["Fix outcomes:"]
-    for fix_outcome in fix_outcomes:
-        lines.append(f"  {fix_outcome.fix_id}: {fix_outcome.status} ({fix_outcome.description})")
-    return "\n".join(lines)
+def _format_config_toml(effective_config: Config) -> str:
+    libraries_repr = ", ".join(f'"{library}"' for library in effective_config.seeds.libraries)
+    return (
+        "[tool.nborder]\n"
+        "\n"
+        "[tool.nborder.seeds]\n"
+        f"value = {effective_config.seeds.value}\n"
+        f"libraries = [{libraries_repr}]\n"
+    )
