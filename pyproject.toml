@@ -65,3 +65,7 @@ python_version = "3.10"
 strict = true
 mypy_path = "src"
 files = ["src"]
+
+[[tool.mypy.overrides]]
+module = "tomli"
+ignore_missing_imports = true
