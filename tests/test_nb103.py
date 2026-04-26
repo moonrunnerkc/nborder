@@ -138,6 +138,40 @@ def test_seeds_fix_injects_numpy_cell_and_second_pass_is_noop(tmp_path: Path) ->
     assert "seeds: no-op" in second_outcome.output
 
 
+def test_seeds_fix_uses_user_alias_when_numpy_aliased_elsewhere(tmp_path: Path) -> None:
+    copied_notebook = tmp_path / "numpy_custom_alias.ipynb"
+    shutil.copyfile(FIXTURE_ROOT / "NB103" / "numpy_custom_alias.ipynb", copied_notebook)
+
+    command_outcome = CliRunner().invoke(app, ["check", "--fix=seeds", str(copied_notebook)])
+
+    assert command_outcome.exit_code == 0
+    rewritten_notebook = read_notebook(copied_notebook)
+    assert rewritten_notebook.cells[0].source == (
+        "import numpy as numpy_lib\n"
+        "rng = numpy_lib.random.default_rng(42)\n"
+    )
+
+
+def test_seeds_fix_skips_import_when_parameters_cell_already_imported_library(
+    tmp_path: Path,
+) -> None:
+    copied_notebook = tmp_path / "numpy_preimported_in_parameters.ipynb"
+    shutil.copyfile(
+        FIXTURE_ROOT / "NB103" / "numpy_preimported_in_parameters.ipynb",
+        copied_notebook,
+    )
+
+    command_outcome = CliRunner().invoke(app, ["check", "--fix=seeds", str(copied_notebook)])
+
+    assert command_outcome.exit_code == 0
+    rewritten_notebook = read_notebook(copied_notebook)
+    assert rewritten_notebook.cells[1].source == (
+        "rng = numpy_lib.random.default_rng(42)\n"
+    )
+    assert len(rewritten_notebook.cells) == 3
+    assert rewritten_notebook.cells[0].cell_id == "params-cell"
+
+
 def test_seeds_fix_injects_torch_cuda_lines(tmp_path: Path) -> None:
     copied_notebook = tmp_path / "torch_cuda_unseeded.ipynb"
     shutil.copyfile(FIXTURE_ROOT / "NB103" / "torch_cuda_unseeded.ipynb", copied_notebook)

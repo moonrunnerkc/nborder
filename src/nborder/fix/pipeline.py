@@ -41,9 +41,11 @@ def plan_fix_pipeline(
 
     if "seeds" in enabled_fixes:
         seeds_outcome, seed_cell_source = plan_seed_injection(
+            notebook,
             graph,
             diagnostics,
             effective_seed_config,
+            cell_order=cell_order,
         )
         outcomes.append(seeds_outcome)
 
