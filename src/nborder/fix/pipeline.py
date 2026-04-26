@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from nborder.config import SeedConfig
 from nborder.fix.models import FixOutcome
+from nborder.fix.seeds import plan_seed_injection
 from nborder.graph.models import DataflowGraph, Edge
 from nborder.parser.models import Notebook
 from nborder.rules.types import Diagnostic
@@ -11,7 +13,8 @@ def plan_fix_pipeline(
     graph: DataflowGraph,
     diagnostics: tuple[Diagnostic, ...],
     enabled_fixes: frozenset[str],
-) -> tuple[tuple[int, ...] | None, bool, tuple[FixOutcome, ...]]:
+    seed_config: SeedConfig | None = None,
+) -> tuple[tuple[int, ...] | None, str | None, bool, tuple[FixOutcome, ...]]:
     """Plan enabled fix stages for a notebook.
 
     Args:
@@ -21,11 +24,13 @@ def plan_fix_pipeline(
         enabled_fixes: Fix identifiers enabled for this run.
 
     Returns:
-        Cell order, execution-count clearing flag, and per-stage outcomes.
+        Cell order, seed cell source, execution-count clearing flag, and per-stage outcomes.
     """
     outcomes: list[FixOutcome] = []
     cell_order: tuple[int, ...] | None = None
+    seed_cell_source: str | None = None
     clear_execution_counts = False
+    effective_seed_config = seed_config if seed_config is not None else SeedConfig()
 
     if "reorder" in enabled_fixes:
         reorder_outcome = _plan_reorder(notebook, graph, diagnostics)
@@ -34,13 +39,21 @@ def plan_fix_pipeline(
             cell_order = reorder_outcome.cell_order
             clear_execution_counts = True
 
+    if "seeds" in enabled_fixes:
+        seeds_outcome, seed_cell_source = plan_seed_injection(
+            graph,
+            diagnostics,
+            effective_seed_config,
+        )
+        outcomes.append(seeds_outcome)
+
     if "clear-counts" in enabled_fixes:
         clear_counts_outcome = _plan_clear_counts(notebook, diagnostics, clear_execution_counts)
         outcomes.append(clear_counts_outcome)
         if clear_counts_outcome.status == "applied":
             clear_execution_counts = True
 
-    return cell_order, clear_execution_counts, tuple(outcomes)
+    return cell_order, seed_cell_source, clear_execution_counts, tuple(outcomes)
 
 
 def _plan_reorder(

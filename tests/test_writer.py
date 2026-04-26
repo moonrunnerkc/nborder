@@ -47,12 +47,13 @@ def test_writer_mutation_path_reorders_and_clears_counts_across_minor_versions(
         graph = build_dataflow_graph(notebook)
         classified_uses = classify_unresolved_uses(graph)
         diagnostics = check_use_before_assign(notebook, graph, classified_uses)
-        cell_order, clear_counts, _outcomes = plan_fix_pipeline(
+        cell_order, seed_cell_source, clear_counts, _outcomes = plan_fix_pipeline(
             notebook,
             graph,
             diagnostics,
             frozenset({"reorder"}),
         )
+        assert seed_cell_source is None
         write_notebook(notebook, cell_order=cell_order, clear_execution_counts=clear_counts)
 
         rewritten_notebook = read_notebook(copied_notebook)
@@ -64,12 +65,13 @@ def test_writer_mutation_path_reorders_and_clears_counts_across_minor_versions(
         graph = build_dataflow_graph(rewritten_notebook)
         classified_uses = classify_unresolved_uses(graph)
         diagnostics = check_use_before_assign(rewritten_notebook, graph, classified_uses)
-        cell_order, clear_counts, _outcomes = plan_fix_pipeline(
+        cell_order, seed_cell_source, clear_counts, _outcomes = plan_fix_pipeline(
             rewritten_notebook,
             graph,
             diagnostics,
             frozenset({"reorder"}),
         )
+        assert seed_cell_source is None
         write_notebook(
             rewritten_notebook,
             cell_order=cell_order,

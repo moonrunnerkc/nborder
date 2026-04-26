@@ -15,6 +15,7 @@ def write_notebook(
     path: Path | None = None,
     *,
     cell_order: tuple[int, ...] | None = None,
+    seed_cell_source: str | None = None,
     clear_execution_counts: bool = False,
 ) -> None:
     """Write a notebook, preserving raw bytes when no mutation is requested.
@@ -23,16 +24,18 @@ def write_notebook(
         notebook: Parsed notebook to write.
         path: Destination path. Defaults to the source path.
         cell_order: Optional source cell index order for mutation writes.
+        seed_cell_source: Optional source for an injected seed cell.
         clear_execution_counts: Whether to clear code-cell execution counts.
     """
     destination = path if path is not None else notebook.path
-    if cell_order is None and not clear_execution_counts:
+    if cell_order is None and seed_cell_source is None and not clear_execution_counts:
         destination.write_bytes(notebook.raw_bytes)
         return
     destination.write_bytes(
         serialize_notebook(
             notebook,
             cell_order=cell_order,
+            seed_cell_source=seed_cell_source,
             clear_execution_counts=clear_execution_counts,
         )
     )
@@ -42,6 +45,7 @@ def serialize_notebook(
     notebook: Notebook,
     *,
     cell_order: tuple[int, ...] | None = None,
+    seed_cell_source: str | None = None,
     clear_execution_counts: bool = False,
 ) -> bytes:
     """Serialize a possibly modified notebook with stable formatting controls.
@@ -49,15 +53,16 @@ def serialize_notebook(
     Args:
         notebook: Parsed notebook to serialize.
         cell_order: Optional source cell index order for the cells array.
+        seed_cell_source: Optional source for an injected seed cell.
         clear_execution_counts: Whether to clear code-cell execution counts.
 
     Returns:
         UTF-8 JSON bytes with the original trailing newline convention.
     """
-    if cell_order is None and not clear_execution_counts:
+    if cell_order is None and seed_cell_source is None and not clear_execution_counts:
         return notebook.raw_bytes
 
-    notebook_node = _modified_node(notebook, cell_order, clear_execution_counts)
+    notebook_node = _modified_node(notebook, cell_order, seed_cell_source, clear_execution_counts)
     serialized_text = cast(
         str,
         nbformat.writes(notebook_node, version=nbformat.NO_CONVERT, indent=1),  # type: ignore[no-untyped-call]
@@ -69,6 +74,7 @@ def serialize_notebook(
 def _modified_node(
     notebook: Notebook,
     cell_order: tuple[int, ...] | None,
+    seed_cell_source: str | None,
     clear_execution_counts: bool,
 ) -> NotebookNode:
     notebook_node = copy.deepcopy(notebook.node)
@@ -76,11 +82,29 @@ def _modified_node(
     if cell_order is not None:
         cells_by_index = {cell.index: notebook_node.cells[cell.index] for cell in notebook.cells}
         notebook_node.cells = [cells_by_index[cell_index] for cell_index in cell_order]
+    if seed_cell_source is not None:
+        seed_cell = nbformat.v4.new_code_cell(  # type: ignore[no-untyped-call]
+            source=seed_cell_source,
+            metadata={"tags": [], "language": "python"},
+            execution_count=None,
+        )
+        notebook_node.cells.insert(_seed_cell_index(notebook, cell_order), seed_cell)
     if clear_execution_counts:
         for cell_node in notebook_node.cells:
             if cell_node.get("cell_type") == "code":
                 cell_node.execution_count = None
     return notebook_node
+
+
+def _seed_cell_index(notebook: Notebook, cell_order: tuple[int, ...] | None) -> int:
+    ordered_indexes = (
+        cell_order if cell_order is not None else tuple(cell.index for cell in notebook.cells)
+    )
+    insert_index = 0
+    for position, cell_index in enumerate(ordered_indexes):
+        if notebook.cells[cell_index].tags.intersection({"parameters", "injected-parameters"}):
+            insert_index = position + 1
+    return insert_index
 
 
 def _preserve_trailing_newline(raw_bytes: bytes, serialized_text: str) -> str:

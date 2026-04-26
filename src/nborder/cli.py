@@ -6,6 +6,7 @@ from typing import Annotated
 
 import typer
 
+from nborder.config import Config, load_config
 from nborder.fix.models import FixOutcome
 from nborder.fix.pipeline import plan_fix_pipeline
 from nborder.graph.builder import build_dataflow_graph
@@ -15,7 +16,9 @@ from nborder.parser.writer import serialize_notebook, write_notebook
 from nborder.reporters.text import format_diagnostic, format_summary
 from nborder.rules.nb101 import check_non_monotonic_execution_counts
 from nborder.rules.nb102 import check_restart_run_all
+from nborder.rules.nb103 import check_unseeded_stochastic_calls
 from nborder.rules.nb201 import check_use_before_assign
+from nborder.rules.suppression import filter_suppressed_diagnostics
 from nborder.rules.types import Diagnostic
 from nborder.rules.unresolved import classify_unresolved_uses
 
@@ -59,28 +62,36 @@ def check(
     enabled_fixes = _enabled_fixes(fix, diff)
 
     for notebook_path in notebooks:
+        config = load_config(notebook_path)
         notebook = read_notebook(notebook_path)
-        notebook_diagnostics = _check_notebook(notebook, include_info=include_info)
+        notebook_diagnostics = _check_notebook(notebook, config, include_info=include_info)
 
         if enabled_fixes:
             graph = build_dataflow_graph(notebook)
-            cell_order, clear_execution_counts, notebook_fix_outcomes = plan_fix_pipeline(
+            (
+                cell_order,
+                seed_cell_source,
+                clear_execution_counts,
+                notebook_fix_outcomes,
+            ) = plan_fix_pipeline(
                 notebook,
                 graph,
                 notebook_diagnostics,
                 enabled_fixes,
+                config.seeds,
             )
             fix_outcomes.extend(notebook_fix_outcomes)
             if diff:
-                _write_diff(notebook, cell_order, clear_execution_counts)
-            elif cell_order is not None or clear_execution_counts:
+                _write_diff(notebook, cell_order, seed_cell_source, clear_execution_counts)
+            elif cell_order is not None or seed_cell_source is not None or clear_execution_counts:
                 write_notebook(
                     notebook,
                     cell_order=cell_order,
+                    seed_cell_source=seed_cell_source,
                     clear_execution_counts=clear_execution_counts,
                 )
                 notebook = read_notebook(notebook_path)
-                notebook_diagnostics = _check_notebook(notebook, include_info=include_info)
+                notebook_diagnostics = _check_notebook(notebook, config, include_info=include_info)
 
         diagnostics.extend(_visible_diagnostics(notebook_diagnostics, include_info=include_info))
 
@@ -120,12 +131,18 @@ def _iter_notebook_paths(paths: tuple[Path, ...]) -> tuple[Path, ...]:
     return tuple(notebook_paths)
 
 
-def _check_notebook(notebook: Notebook, *, include_info: bool) -> tuple[Diagnostic, ...]:
+def _check_notebook(
+    notebook: Notebook,
+    config: Config,
+    *,
+    include_info: bool,
+) -> tuple[Diagnostic, ...]:
     graph = build_dataflow_graph(notebook)
     classified_uses = classify_unresolved_uses(graph)
     diagnostics = [
         *check_non_monotonic_execution_counts(notebook),
         *check_use_before_assign(notebook, graph, classified_uses),
+        *check_unseeded_stochastic_calls(notebook, graph, config.seeds),
         *check_restart_run_all(
             notebook,
             graph,
@@ -133,7 +150,7 @@ def _check_notebook(notebook: Notebook, *, include_info: bool) -> tuple[Diagnost
             include_wildcard_info=include_info,
         ),
     ]
-    return tuple(diagnostics)
+    return filter_suppressed_diagnostics(notebook, tuple(diagnostics))
 
 
 def _visible_diagnostics(
@@ -148,22 +165,24 @@ def _visible_diagnostics(
 
 def _enabled_fixes(fix: str | None, diff: bool) -> frozenset[str]:
     if diff:
-        return frozenset({"reorder", "clear-counts"})
+        return frozenset({"reorder", "seeds", "clear-counts"})
     if fix is None:
         return frozenset()
     if fix == "all":
-        return frozenset({"reorder", "clear-counts"})
+        return frozenset({"reorder", "seeds", "clear-counts"})
     return frozenset(fix_id.strip() for fix_id in fix.split(",") if fix_id.strip())
 
 
 def _write_diff(
     notebook: Notebook,
     cell_order: tuple[int, ...] | None,
+    seed_cell_source: str | None,
     clear_execution_counts: bool,
 ) -> None:
     modified_bytes = serialize_notebook(
         notebook,
         cell_order=cell_order,
+        seed_cell_source=seed_cell_source,
         clear_execution_counts=clear_execution_counts,
     )
     if modified_bytes == notebook.raw_bytes:

@@ -18,7 +18,7 @@ def test_reorder_fix_plans_dependency_first_order_for_dag() -> None:
     classified_uses = classify_unresolved_uses(graph)
     diagnostics = check_use_before_assign(notebook, graph, classified_uses)
 
-    cell_order, clear_counts, outcomes = plan_fix_pipeline(
+    cell_order, seed_cell_source, clear_counts, outcomes = plan_fix_pipeline(
         notebook,
         graph,
         diagnostics,
@@ -26,6 +26,7 @@ def test_reorder_fix_plans_dependency_first_order_for_dag() -> None:
     )
 
     assert cell_order == (1, 0, 2)
+    assert seed_cell_source is None
     assert clear_counts is True
     assert outcomes[0].status == "applied"
 
@@ -36,7 +37,7 @@ def test_reorder_fix_bails_on_cycle_with_edge_details() -> None:
     classified_uses = classify_unresolved_uses(graph)
     diagnostics = check_use_before_assign(notebook, graph, classified_uses)
 
-    cell_order, clear_counts, outcomes = plan_fix_pipeline(
+    cell_order, seed_cell_source, clear_counts, outcomes = plan_fix_pipeline(
         notebook,
         graph,
         diagnostics,
@@ -44,6 +45,7 @@ def test_reorder_fix_bails_on_cycle_with_edge_details() -> None:
     )
 
     assert cell_order is None
+    assert seed_cell_source is None
     assert clear_counts is False
     assert outcomes[0].status == "bailed"
     assert "Cell 1 defines `y` used by cell 0." in outcomes[0].description
@@ -59,7 +61,7 @@ def test_clear_counts_runs_after_reorder_bails() -> None:
         *check_use_before_assign(notebook, graph, classified_uses),
     )
 
-    cell_order, clear_counts, outcomes = plan_fix_pipeline(
+    cell_order, seed_cell_source, clear_counts, outcomes = plan_fix_pipeline(
         notebook,
         graph,
         diagnostics,
@@ -67,6 +69,7 @@ def test_clear_counts_runs_after_reorder_bails() -> None:
     )
 
     assert cell_order is None
+    assert seed_cell_source is None
     assert clear_counts is True
     assert [(outcome.fix_id, outcome.status) for outcome in outcomes] == [
         ("reorder", "bailed"),
@@ -83,7 +86,7 @@ def test_clear_counts_is_no_op_after_reorder_applies() -> None:
         *check_use_before_assign(notebook, graph, classified_uses),
     )
 
-    cell_order, clear_counts, outcomes = plan_fix_pipeline(
+    cell_order, seed_cell_source, clear_counts, outcomes = plan_fix_pipeline(
         notebook,
         graph,
         diagnostics,
@@ -91,6 +94,7 @@ def test_clear_counts_is_no_op_after_reorder_applies() -> None:
     )
 
     assert cell_order == (1, 0, 2)
+    assert seed_cell_source is None
     assert clear_counts is True
     assert [(outcome.fix_id, outcome.status) for outcome in outcomes] == [
         ("reorder", "applied"),

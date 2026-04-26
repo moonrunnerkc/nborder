@@ -16,6 +16,7 @@ dependencies = [
     "libcst>=1.5",
     "nbformat>=5.10",
     "rich>=13.9",
+    "tomli>=2.0; python_version < '3.11'",
     "typer>=0.15",
 ]
 classifiers = [
