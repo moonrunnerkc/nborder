@@ -1,0 +1,45 @@
+# Local planning and assistant instructions
+.github/BUILD_PLAN.md
+.github/copilot-instructions.md
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Python packaging and build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Tooling and local config
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
