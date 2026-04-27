@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - uses: moonrunnerkc/nborder@v0.1.0
+      - uses: moonrunnerkc/nborder@v0.1.4
         with:
           path: notebooks/
 ```
