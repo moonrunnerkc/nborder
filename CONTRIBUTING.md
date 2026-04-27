@@ -9,7 +9,7 @@ git clone https://github.com/moonrunnerkc/nborder
 cd nborder
 uv venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+uv pip install -e ".[dev]"
 ```
 
 The `[dev]` extra installs `mypy`, `pytest`, `pytest-cov`, `ruff`, `pre-commit`, and `jsonschema`.
@@ -64,7 +64,7 @@ Before opening a PR:
 - [ ] `pytest` passes; no skipped tests except those gated on optional extras.
 - [ ] `ruff check src tests` is clean.
 - [ ] `mypy` is clean.
-- [ ] `nborder check src tests` passes (we dogfood).
+- [ ] `nborder check tests/fixtures/roundtrip` passes.
 - [ ] New rules ship with at least three fixture notebooks and a docs page.
 - [ ] `CHANGELOG.md` has an entry under `## [Unreleased]` describing the change in adopter-facing terms.
 

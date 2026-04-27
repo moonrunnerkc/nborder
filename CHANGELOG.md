@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Reject invalid notebook paths, empty directory scans, and unknown `--include` levels instead of silently doing no work.
+- Print clean CLI errors for missing and unparseable notebooks instead of tracebacks.
+- Report the actual seed-cell insertion position in `--fix=seeds` outcomes.
+- Remove the non-functional GitHub Action `select` input until rule selection lands in v0.2.
+- Remove the unused `reproduce` extra and docs references until the fresh-kernel runner exists.
+- Enforce coverage collection in CI and align contributor setup docs with `uv`.
+
 ## [0.1.0] - 2026-04-26
 
 Initial public release.
