@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import difflib
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -22,49 +23,54 @@ from nborder.reporters.text import TextReporter
 from nborder.rules.types import Diagnostic, Severity
 
 _DEFAULT_INCLUDE_LEVELS: frozenset[Severity] = frozenset({"error", "warning"})
+_VALID_FIX_CATEGORIES = frozenset({"reorder", "seeds", "clear-counts"})
 
 _RULE_DOCS_DIR = Path(__file__).parent.parent.parent / "docs" / "rules"
 
-app = typer.Typer(
-    help="Lint Jupyter notebooks for hidden-state and execution-order bugs.",
-    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
-)
+app = typer.Typer(help="Lint Jupyter notebooks for hidden-state and execution-order bugs.")
 
 
-@app.callback()
-def main() -> None:
-    """Run the nborder command-line interface."""
-
-
-@app.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
+@app.command()
 def check(
     paths: Annotated[
-        list[str], typer.Argument(help="Notebook files, directories, and --fix tokens.")
+        list[Path],
+        typer.Argument(help="Notebook files or directories to check.", exists=True),
     ],
-    diff: Annotated[bool, typer.Option("--diff", help="Show safe-fix changes.")] = False,
-    include: Annotated[
+    fix: Annotated[
+        bool,
+        typer.Option("--fix", help="Apply auto-fixes for fixable diagnostics."),
+    ] = False,
+    fix_categories: Annotated[
         str | None,
         typer.Option(
-            "--include",
-            help="Diagnostic levels to include (error, warning, info). Comma-separated.",
+            "--fix-categories",
+            help="Comma-separated subset: reorder, seeds, clear-counts. Implies --fix.",
         ),
     ] = None,
     output_format: Annotated[
         str,
-        typer.Option(
-            "--output-format",
-            help="Output format: text (default), json, github, or sarif.",
-        ),
+        typer.Option("--output-format", help="text, json, github, sarif"),
     ] = "text",
+    include: Annotated[
+        str | None,
+        typer.Option(
+            "--include",
+            help="Comma-separated severity levels to include beyond defaults.",
+        ),
+    ] = None,
     exit_zero: Annotated[
-        bool, typer.Option("--exit-zero", help="Exit 0 with diagnostics.")
+        bool,
+        typer.Option("--exit-zero", help="Always exit 0 even when diagnostics are found."),
+    ] = False,
+    diff: Annotated[
+        bool,
+        typer.Option("--diff", help="Print unified diff of fixes without writing."),
     ] = False,
 ) -> None:
     """Check notebooks for hidden-state and execution-order bugs."""
-    fix, parsed_paths = _parse_check_tokens(tuple(paths))
-    notebooks = tuple(_iter_notebook_paths(parsed_paths))
+    notebooks = tuple(_iter_notebook_paths(tuple(paths)))
     include_levels = _parse_include(include)
-    enabled_fixes = _enabled_fixes(fix, diff)
+    enabled_fixes = _enabled_fixes(fix=fix, fix_categories=fix_categories, diff=diff)
     reporter = _select_reporter(output_format)
 
     diagnostics: list[Diagnostic] = []
@@ -149,20 +155,6 @@ def config() -> None:
     typer.echo(_format_config_toml(effective_config))
 
 
-def _parse_check_tokens(tokens: tuple[str, ...]) -> tuple[str | None, tuple[Path, ...]]:
-    fix: str | None = None
-    parsed_paths: list[Path] = []
-    for token in tokens:
-        if token == "--fix":
-            fix = "all"
-            continue
-        if token.startswith("--fix="):
-            fix = token.removeprefix("--fix=") or "all"
-            continue
-        parsed_paths.append(Path(token))
-    return fix, tuple(parsed_paths)
-
-
 def _iter_notebook_paths(paths: tuple[Path, ...]) -> tuple[Path, ...]:
     if not paths:
         raise typer.BadParameter("no paths provided; pass a notebook file or directory.")
@@ -184,20 +176,50 @@ def _iter_notebook_paths(paths: tuple[Path, ...]) -> tuple[Path, ...]:
                 f"path '{check_path}' is not a .ipynb file; pass a notebook file or directory."
             )
         notebook_paths.append(check_path)
-    if not notebook_paths:
-        joined_paths = ", ".join(str(path) for path in paths)
-        raise typer.BadParameter(f"no notebooks found at: {joined_paths}")
     return tuple(notebook_paths)
 
 
-def _enabled_fixes(fix: str | None, diff: bool) -> frozenset[str]:
-    if diff:
-        return frozenset({"reorder", "seeds", "clear-counts"})
-    if fix is None:
+def _enabled_fixes(*, fix: bool, fix_categories: str | None, diff: bool) -> frozenset[str]:
+    if not fix and not fix_categories and not diff:
         return frozenset()
-    if fix == "all":
-        return frozenset({"reorder", "seeds", "clear-counts"})
-    return frozenset(fix_id.strip() for fix_id in fix.split(",") if fix_id.strip())
+    if fix_categories is None:
+        return _VALID_FIX_CATEGORIES
+    requested = frozenset(
+        category.strip() for category in fix_categories.split(",") if category.strip()
+    )
+    unknown = requested - _VALID_FIX_CATEGORIES
+    if unknown:
+        valid_list = ", ".join(sorted(_VALID_FIX_CATEGORIES))
+        unknown_list = ", ".join(sorted(unknown))
+        typer.echo(
+            f"error: unknown --fix-categories value(s): {unknown_list}. Valid: {valid_list}.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    return requested
+
+
+def _rewrite_legacy_fix_argument(raw_args: list[str]) -> list[str]:
+    """Rewrite deprecated --fix=<value> to --fix-categories=<value> --fix.
+
+    Removed in v0.3.0.
+    """
+    rewritten: list[str] = []
+    saw_legacy_fix = False
+    for arg in raw_args:
+        if arg.startswith("--fix=") and arg != "--fix=":
+            value = arg.removeprefix("--fix=")
+            rewritten.extend([f"--fix-categories={value}", "--fix"])
+            saw_legacy_fix = True
+        else:
+            rewritten.append(arg)
+    if saw_legacy_fix:
+        typer.echo(
+            "warning: --fix=<value> is deprecated and will be removed in v0.3.0; "
+            "use --fix-categories=<value> instead.",
+            err=True,
+        )
+    return rewritten
 
 def _parse_include(include: str | None) -> frozenset[Severity]:
     if include is None:
@@ -262,3 +284,13 @@ def _format_config_toml(effective_config: Config) -> str:
         f"value = {effective_config.seeds.value}\n"
         f"libraries = [{libraries_repr}]\n"
     )
+
+
+def main() -> None:
+    """Rewrite deprecated arguments, then run the Typer application."""
+    sys.argv[1:] = _rewrite_legacy_fix_argument(sys.argv[1:])
+    app()
+
+
+if __name__ == "__main__":
+    main()

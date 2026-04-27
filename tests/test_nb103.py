@@ -124,7 +124,10 @@ def test_seeds_fix_injects_numpy_cell_and_second_pass_is_noop(tmp_path: Path) ->
     shutil.copyfile(fixture_path, copied_notebook)
     runner = CliRunner()
 
-    first_outcome = runner.invoke(app, ["check", "--fix=seeds", str(copied_notebook)])
+    first_outcome = runner.invoke(
+        app,
+        ["check", "--fix-categories=seeds", str(copied_notebook)],
+    )
 
     assert first_outcome.exit_code == 0
     assert "seeds: applied (numpy seed injected at cell 0)" in first_outcome.output
@@ -134,7 +137,10 @@ def test_seeds_fix_injects_numpy_cell_and_second_pass_is_noop(tmp_path: Path) ->
         "rng = np.random.default_rng(42)\n"
     )
 
-    second_outcome = runner.invoke(app, ["check", "--fix=seeds", str(copied_notebook)])
+    second_outcome = runner.invoke(
+        app,
+        ["check", "--fix-categories=seeds", str(copied_notebook)],
+    )
 
     assert second_outcome.exit_code == 0
     assert "seeds: no-op" in second_outcome.output
@@ -144,7 +150,10 @@ def test_seeds_fix_uses_user_alias_when_numpy_aliased_elsewhere(tmp_path: Path) 
     copied_notebook = tmp_path / "numpy_custom_alias.ipynb"
     shutil.copyfile(FIXTURE_ROOT / "NB103" / "numpy_custom_alias.ipynb", copied_notebook)
 
-    command_outcome = CliRunner().invoke(app, ["check", "--fix=seeds", str(copied_notebook)])
+    command_outcome = CliRunner().invoke(
+        app,
+        ["check", "--fix-categories=seeds", str(copied_notebook)],
+    )
 
     assert command_outcome.exit_code == 0
     rewritten_notebook = read_notebook(copied_notebook)
@@ -163,7 +172,10 @@ def test_seeds_fix_skips_import_when_parameters_cell_already_imported_library(
         copied_notebook,
     )
 
-    command_outcome = CliRunner().invoke(app, ["check", "--fix=seeds", str(copied_notebook)])
+    command_outcome = CliRunner().invoke(
+        app,
+        ["check", "--fix-categories=seeds", str(copied_notebook)],
+    )
 
     assert command_outcome.exit_code == 0
     assert "seeds: applied (numpy seed injected at cell 1)" in command_outcome.output
@@ -179,7 +191,10 @@ def test_seeds_fix_injects_torch_cuda_lines(tmp_path: Path) -> None:
     copied_notebook = tmp_path / "torch_cuda_unseeded.ipynb"
     shutil.copyfile(FIXTURE_ROOT / "NB103" / "torch_cuda_unseeded.ipynb", copied_notebook)
 
-    command_outcome = CliRunner().invoke(app, ["check", "--fix=seeds", str(copied_notebook)])
+    command_outcome = CliRunner().invoke(
+        app,
+        ["check", "--fix-categories=seeds", str(copied_notebook)],
+    )
 
     assert command_outcome.exit_code == 0
     rewritten_notebook = read_notebook(copied_notebook)
@@ -194,7 +209,10 @@ def test_seeds_fix_injects_one_cell_for_multiple_libraries(tmp_path: Path) -> No
     copied_notebook = tmp_path / "numpy_torch_unseeded.ipynb"
     shutil.copyfile(FIXTURE_ROOT / "NB103" / "numpy_torch_unseeded.ipynb", copied_notebook)
 
-    command_outcome = CliRunner().invoke(app, ["check", "--fix=seeds", str(copied_notebook)])
+    command_outcome = CliRunner().invoke(
+        app,
+        ["check", "--fix-categories=seeds", str(copied_notebook)],
+    )
 
     assert command_outcome.exit_code == 0
     rewritten_notebook = read_notebook(copied_notebook)
@@ -256,7 +274,7 @@ def test_jax_seed_fix_is_noop() -> None:
     runner = CliRunner()
     notebook_path = FIXTURE_ROOT / "NB103" / "jax_unseeded.ipynb"
 
-    command_outcome = runner.invoke(app, ["check", "--fix=seeds", str(notebook_path)])
+    command_outcome = runner.invoke(app, ["check", "--fix-categories=seeds", str(notebook_path)])
 
     assert command_outcome.exit_code == 1
     assert "seeds: no-op" in command_outcome.output
@@ -272,7 +290,10 @@ def test_seed_cell_inserts_after_parameters_cell(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    command_outcome = CliRunner().invoke(app, ["check", "--fix=seeds", str(copied_notebook)])
+    command_outcome = CliRunner().invoke(
+        app,
+        ["check", "--fix-categories=seeds", str(copied_notebook)],
+    )
 
     assert command_outcome.exit_code == 0
     rewritten_notebook = read_notebook(copied_notebook)

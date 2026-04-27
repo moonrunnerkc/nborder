@@ -88,6 +88,17 @@ def test_check_rejects_unknown_include_level() -> None:
     assert "unknown --include value 'warn'" in command_outcome.output
 
 
+def test_check_unknown_flag_exits_with_usage_error() -> None:
+    runner = CliRunner()
+    notebook_path = FIXTURE_ROOT / "roundtrip" / "v45_clean.ipynb"
+
+    command_outcome = runner.invoke(app, ["check", "--fxi", str(notebook_path)])
+
+    assert command_outcome.exit_code == 2
+    assert "No such option" in command_outcome.output
+    assert "--fxi" in command_outcome.output
+
+
 def test_check_rejects_non_notebook_file(tmp_path: Path) -> None:
     runner = CliRunner()
     python_file = tmp_path / "notebook.py"
@@ -163,7 +174,10 @@ def test_check_fix_reorder_rewrites_dag_and_clears_counts(tmp_path: Path) -> Non
     copied_notebook = tmp_path / fixture_path.name
     shutil.copyfile(fixture_path, copied_notebook)
 
-    command_outcome = runner.invoke(app, ["check", "--fix=reorder", str(copied_notebook)])
+    command_outcome = runner.invoke(
+        app,
+        ["check", "--fix-categories=reorder", str(copied_notebook)],
+    )
 
     assert command_outcome.exit_code == 0
     assert "reorder: applied" in command_outcome.output
@@ -171,10 +185,67 @@ def test_check_fix_reorder_rewrites_dag_and_clears_counts(tmp_path: Path) -> Non
     assert rewritten_notebook.cells[0].cell_id == "define-df"
     assert all(cell.execution_count is None for cell in rewritten_notebook.cells)
 
-    second_outcome = runner.invoke(app, ["check", "--fix=reorder", str(copied_notebook)])
+    second_outcome = runner.invoke(
+        app,
+        ["check", "--fix-categories=reorder", str(copied_notebook)],
+    )
 
     assert second_outcome.exit_code == 0
     assert "reorder: no-op" in second_outcome.output
+
+
+def test_check_legacy_fix_value_form_emits_deprecation_warning(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    runner = CliRunner()
+    fixture_path = FIXTURE_ROOT / "phase3" / "reorder_dag.ipynb"
+    copied_notebook = tmp_path / fixture_path.name
+    shutil.copyfile(fixture_path, copied_notebook)
+
+    rewritten_args = cli_module._rewrite_legacy_fix_argument(
+        ["check", "--fix=reorder", str(copied_notebook)]
+    )
+    warning_output = capsys.readouterr().err
+    command_outcome = runner.invoke(app, rewritten_args)
+
+    assert "deprecated" in warning_output
+    assert "--fix-categories=<value>" in warning_output
+    assert command_outcome.exit_code == 0
+    assert "reorder: applied" in command_outcome.output
+
+
+def test_check_rejects_unknown_fix_category() -> None:
+    runner = CliRunner()
+    notebook_path = FIXTURE_ROOT / "roundtrip" / "v45_clean.ipynb"
+
+    command_outcome = runner.invoke(
+        app,
+        ["check", "--fix-categories=bogus", str(notebook_path)],
+    )
+
+    assert command_outcome.exit_code == 2
+    assert "unknown --fix-categories value(s): bogus" in command_outcome.output
+    assert "clear-counts" in command_outcome.output
+
+
+def test_rewrite_legacy_fix_argument_leaves_non_legacy_args_silent(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    rewritten_args = cli_module._rewrite_legacy_fix_argument(
+        ["check", "--fix=", "notebook.ipynb"]
+    )
+
+    assert rewritten_args == ["check", "--fix=", "notebook.ipynb"]
+    assert capsys.readouterr().err == ""
+
+
+def test_iter_notebook_paths_rejects_direct_empty_and_missing_inputs(tmp_path: Path) -> None:
+    with pytest.raises(Exception, match="no paths provided"):
+        cli_module._iter_notebook_paths(())
+
+    with pytest.raises(Exception, match="does not exist"):
+        cli_module._iter_notebook_paths((tmp_path / "missing.ipynb",))
 
 
 def test_check_fix_reorder_bails_on_cycle_but_clear_counts_runs(tmp_path: Path) -> None:
