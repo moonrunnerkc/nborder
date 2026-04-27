@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-04-26
+
+### Fixed
+
+- Restore standard Typer parsing so `--fix` appears as a real flag in help output and unknown flags fail fast instead of being treated as notebook paths.
+- Package rule documentation in the wheel so `nborder rule <CODE>` works after installation from PyPI.
+- Resolve wildcard imports from a static registry instead of importing user-named modules at lint time.
+
 ## [0.1.2] - 2026-04-26
 
 ### Fixed
@@ -44,6 +52,7 @@ Initial public release.
 - **CLI flags**: `--fix`, `--diff`, `--output-format`, `--exit-zero`, `--include`. Subcommands: `check`, `rule <CODE>`, `config`.
 - **Configuration**: `[tool.nborder.seeds]` in `pyproject.toml` controls the seed value and the enabled library set.
 
+[0.1.3]: https://github.com/moonrunnerkc/nborder/releases/tag/v0.1.3
 [0.1.2]: https://github.com/moonrunnerkc/nborder/releases/tag/v0.1.2
 [0.1.1]: https://github.com/moonrunnerkc/nborder/releases/tag/v0.1.1
 [0.1.0]: https://github.com/moonrunnerkc/nborder/releases/tag/v0.1.0
