@@ -38,10 +38,6 @@ dev = [
     "pytest-cov>=6.0",
     "ruff>=0.8",
 ]
-reproduce = [
-    "papermill>=2.6",
-]
-
 [project.scripts]
 nborder = "nborder.cli:app"
 

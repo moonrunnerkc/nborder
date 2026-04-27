@@ -6,10 +6,6 @@
 
 This is fine for the common review workflow (annotations point at the right cell, and the line number refers to a position inside the cell's source), but it does mean a click-through to a `code=` snippet view will not match the JSON line. Tracking notebook-wide line offsets is a v0.2 item; the JSON line numbers in `.ipynb` files are not stable across editors anyway, so the cell-relative form is a reasonable trade-off.
 
-## --reproduce dynamic pass
-
-The dynamic fresh-kernel rerun is gated behind `--reproduce` and requires the optional `papermill` extra (`pip install nborder[reproduce]`). It is not part of the default `check` flow because running notebooks may have side effects.
-
 ## Multi-language kernels
 
 v0.1 supports Python kernels only. R and Julia notebooks are accepted at parse time but produce no diagnostics. Multi-language support is reserved for a future release.

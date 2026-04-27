@@ -81,6 +81,8 @@ Run `nborder config` to print the effective merged configuration.
 
 **What if I want to disable a rule entirely?** Rule selection lands in v0.2. For now, use `# nborder: noqa: NB201` to suppress a rule for one cell.
 
+**What is on the roadmap?** v0.2 adds project-wide rule selection and the opt-in fresh-kernel `--reproduce` pass. The static linter remains the default path.
+
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md).
