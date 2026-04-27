@@ -181,10 +181,7 @@ def _relative_call_name(library_import: LibraryImport, call_name: str) -> str | 
     prefix = f"{library_import.alias}."
     if not call_name.startswith(prefix):
         return None
-    relative_name = call_name.removeprefix(prefix)
-    if library_import.module == "numpy.random" or library_import.imported_name == "random":
-        return relative_name
-    return relative_name
+    return call_name.removeprefix(prefix)
 
 
 def _is_numpy_random_binding(library_import: LibraryImport) -> bool:
