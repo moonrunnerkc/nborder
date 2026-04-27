@@ -40,11 +40,12 @@ def plan_seed_injection(
     if not seed_libraries:
         return FixOutcome("seeds", "no-op", "no NB103 seed diagnostics found", ()), None
 
+    seed_insert_index = len(_cells_before_seed_insertion(notebook, cell_order))
     seed_lines = _seed_lines(seed_libraries, notebook, graph, seed_config.value, cell_order)
     if not seed_lines:
         return FixOutcome("seeds", "no-op", "no fixable NB103 seed diagnostics found", ()), None
 
-    description = _seed_description(seed_libraries)
+    description = _seed_description(seed_libraries, seed_insert_index)
     first_affected_cell = min(
         cell_index
         for diagnostic in diagnostics
@@ -187,7 +188,7 @@ def _torch_cuda_imported(graph: DataflowGraph) -> bool:
     )
 
 
-def _seed_description(libraries: tuple[str, ...]) -> str:
+def _seed_description(libraries: tuple[str, ...], seed_insert_index: int) -> str:
     library_names = ", ".join(libraries)
     seed_word = "seed" if len(libraries) == 1 else "seeds"
-    return f"{library_names} {seed_word} injected at cell 1"
+    return f"{library_names} {seed_word} injected at cell {seed_insert_index}"

@@ -125,7 +125,7 @@ def test_seeds_fix_injects_numpy_cell_and_second_pass_is_noop(tmp_path: Path) ->
     first_outcome = runner.invoke(app, ["check", "--fix=seeds", str(copied_notebook)])
 
     assert first_outcome.exit_code == 0
-    assert "seeds: applied (numpy seed injected at cell 1)" in first_outcome.output
+    assert "seeds: applied (numpy seed injected at cell 0)" in first_outcome.output
     rewritten_notebook = read_notebook(copied_notebook)
     assert rewritten_notebook.cells[0].source == (
         "import numpy as np\n"
@@ -164,6 +164,7 @@ def test_seeds_fix_skips_import_when_parameters_cell_already_imported_library(
     command_outcome = CliRunner().invoke(app, ["check", "--fix=seeds", str(copied_notebook)])
 
     assert command_outcome.exit_code == 0
+    assert "seeds: applied (numpy seed injected at cell 1)" in command_outcome.output
     rewritten_notebook = read_notebook(copied_notebook)
     assert rewritten_notebook.cells[1].source == (
         "rng = numpy_lib.random.default_rng(42)\n"
