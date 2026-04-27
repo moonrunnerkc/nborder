@@ -79,7 +79,7 @@ Run `nborder config` to print the effective merged configuration.
 
 **How do I suppress a false positive?** Add `# nborder: noqa` (suppress all rules in the cell) or `# nborder: noqa: NB201,NB102` (suppress specific rules) to any line in the cell.
 
-**What if I want to disable a rule entirely?** Use the `select` and `ignore` fields in `[tool.nborder]` to drop a rule code from the enabled set.
+**What if I want to disable a rule entirely?** Rule selection lands in v0.2. For now, use `# nborder: noqa: NB201` to suppress a rule for one cell.
 
 ## Contributing
 
