@@ -7,7 +7,11 @@ from typing import Annotated
 
 import typer
 
-from nborder.check import check_notebook, filter_visible_diagnostics
+from nborder.check import (
+    check_notebook,
+    filter_selected_diagnostics,
+    filter_visible_diagnostics,
+)
 from nborder.config import Config, load_config
 from nborder.fix.models import FixOutcome
 from nborder.fix.pipeline import plan_fix_pipeline
@@ -25,6 +29,7 @@ from nborder.rules.types import Diagnostic, Severity
 
 _DEFAULT_INCLUDE_LEVELS: frozenset[Severity] = frozenset({"error", "warning"})
 _VALID_FIX_CATEGORIES = frozenset({"reorder", "seeds", "clear-counts"})
+_VALID_RULE_CODES = frozenset({"NB101", "NB102", "NB103", "NB201"})
 
 app = typer.Typer(help="Lint Jupyter notebooks for hidden-state and execution-order bugs.")
 
@@ -65,10 +70,18 @@ def check(
         bool,
         typer.Option("--diff", help="Print unified diff of fixes without writing."),
     ] = False,
+    select: Annotated[
+        str | None,
+        typer.Option(
+            "--select",
+            help="Comma-separated rule codes to keep (e.g., NB101,NB103).",
+        ),
+    ] = None,
 ) -> None:
     """Check notebooks for hidden-state and execution-order bugs."""
     notebooks = tuple(_iter_notebook_paths(tuple(paths)))
     include_levels = _parse_include(include)
+    selected_codes = _parse_select(select)
     enabled_fixes = _enabled_fixes(fix=fix, fix_categories=fix_categories, diff=diff)
     reporter = _select_reporter(output_format)
 
@@ -114,8 +127,13 @@ def check(
                         notebook, config, include_levels=include_levels
                     )
 
+            visible_diagnostics = filter_visible_diagnostics(
+                notebook_diagnostics, include_levels=include_levels
+            )
             diagnostics.extend(
-                filter_visible_diagnostics(notebook_diagnostics, include_levels=include_levels)
+                filter_selected_diagnostics(
+                    visible_diagnostics, selected_codes=selected_codes
+                )
             )
         except NotebookParseError as parse_error:
             typer.echo(f"error: {notebook_path}: {parse_error}", err=True)
@@ -219,6 +237,36 @@ def _rewrite_legacy_fix_argument(raw_args: list[str]) -> list[str]:
             err=True,
         )
     return rewritten
+
+def _parse_select(select: str | None) -> frozenset[str] | None:
+    """Parse the ``--select`` flag into a normalized rule-code set.
+
+    Args:
+        select: Raw comma-separated CLI value or ``None``.
+
+    Returns:
+        The selected rule codes, or ``None`` when no selection was requested.
+
+    Raises:
+        typer.Exit: When the value contains an unknown rule code.
+    """
+    if select is None:
+        return None
+    raw_tokens = [token.strip().upper() for token in select.split(",") if token.strip()]
+    if not raw_tokens:
+        return None
+    selected_codes = frozenset(raw_tokens)
+    unknown = selected_codes - _VALID_RULE_CODES
+    if unknown:
+        valid_list = ", ".join(sorted(_VALID_RULE_CODES))
+        unknown_list = ", ".join(sorted(unknown))
+        typer.echo(
+            f"error: unknown --select value(s): {unknown_list}. Valid: {valid_list}.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    return selected_codes
+
 
 def _parse_include(include: str | None) -> frozenset[Severity]:
     if include is None:

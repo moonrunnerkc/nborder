@@ -353,6 +353,42 @@ def test_config_command_prints_effective_toml() -> None:
     assert "value = 42" in command_outcome.output
 
 
+def test_check_select_filters_diagnostics_to_listed_codes() -> None:
+    runner = CliRunner()
+    notebook_path = FIXTURE_ROOT / "NB101" / "non_monotonic.ipynb"
+
+    command_outcome = runner.invoke(
+        app, ["check", "--select=NB201", str(notebook_path)]
+    )
+
+    assert command_outcome.exit_code == 0
+    assert "NB101" not in command_outcome.output
+
+
+def test_check_select_keeps_listed_codes_visible() -> None:
+    runner = CliRunner()
+    notebook_path = FIXTURE_ROOT / "NB101" / "non_monotonic.ipynb"
+
+    command_outcome = runner.invoke(
+        app, ["check", "--select=NB101", str(notebook_path)]
+    )
+
+    assert command_outcome.exit_code == 1
+    assert "NB101" in command_outcome.output
+
+
+def test_check_select_rejects_unknown_rule_code() -> None:
+    runner = CliRunner()
+    notebook_path = FIXTURE_ROOT / "NB101" / "non_monotonic.ipynb"
+
+    command_outcome = runner.invoke(
+        app, ["check", "--select=NB999", str(notebook_path)]
+    )
+
+    assert command_outcome.exit_code == 2
+    assert "unknown --select value" in command_outcome.output
+
+
 def test_check_diff_outputs_json_diff_without_writing(tmp_path: Path) -> None:
     runner = CliRunner()
     fixture_path = FIXTURE_ROOT / "phase3" / "reorder_dag.ipynb"

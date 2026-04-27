@@ -45,3 +45,22 @@ def filter_visible_diagnostics(
 ) -> tuple[Diagnostic, ...]:
     """Return diagnostics whose severity is included in the active level set."""
     return tuple(diagnostic for diagnostic in diagnostics if diagnostic.severity in include_levels)
+
+
+def filter_selected_diagnostics(
+    diagnostics: tuple[Diagnostic, ...],
+    *,
+    selected_codes: frozenset[str] | None,
+) -> tuple[Diagnostic, ...]:
+    """Return diagnostics whose rule code is in the active selection set.
+
+    Args:
+        diagnostics: Diagnostics produced for a notebook.
+        selected_codes: Rule codes to keep; ``None`` disables selection.
+
+    Returns:
+        Diagnostics gated by ``--select``; unchanged when no selection is active.
+    """
+    if selected_codes is None:
+        return diagnostics
+    return tuple(diagnostic for diagnostic in diagnostics if diagnostic.code in selected_codes)
