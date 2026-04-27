@@ -43,6 +43,16 @@ That's it. The action installs `nborder` from PyPI, runs `nborder check --output
 
 If you want `--fix` to run and have a bot open a follow-up PR with the changes, you can chain `peter-evans/create-pull-request` after this action. That pattern is out of scope for v0.1; the action surface is intentionally minimal.
 
+## Capturing output for CI logs
+
+`nborder check ... | tee output.log` will always report exit 0 because `tee` replaces `nborder`'s exit code with its own. CI scripts that pipe through `tee` will swallow real failures. Use one of the following patterns when you need both a log file and a faithful exit code:
+
+- Add `set -o pipefail` at the top of the script so the upstream exit code propagates through the pipe.
+- Redirect with `nborder check ... > output.log 2>&1` and inspect `$?` separately.
+- Use `tee output.log` only after `set -o pipefail`, or pipe through `tee` and check `${PIPESTATUS[0]}` in bash.
+
+The composite Action (`uses: moonrunnerkc/nborder@v0.1.4`) handles exit-code propagation correctly internally; this guidance applies when you call `nborder` from a custom shell step.
+
 ## Comparison with the pre-commit hook
 
 The pre-commit hook catches problems before commit; the GitHub Action catches problems before merge. They are complementary. Most teams adopt both.
