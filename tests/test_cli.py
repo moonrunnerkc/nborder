@@ -4,8 +4,10 @@ import filecmp
 import shutil
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
+import nborder.cli as cli_module
 from nborder.cli import app
 from nborder.parser.reader import read_notebook
 
@@ -74,6 +76,75 @@ def test_check_can_include_wildcard_info() -> None:
 
     assert command_outcome.exit_code == 1
     assert "Possibly defined by wildcard import from numpy" in command_outcome.output
+
+
+def test_check_rejects_non_notebook_file(tmp_path: Path) -> None:
+    runner = CliRunner()
+    python_file = tmp_path / "notebook.py"
+    python_file.write_text("print('not a notebook')\n", encoding="utf-8")
+
+    command_outcome = runner.invoke(app, ["check", str(python_file)])
+
+    assert command_outcome.exit_code == 2
+    assert "is not a .ipynb file" in command_outcome.output
+
+
+def test_check_reports_empty_directory(tmp_path: Path) -> None:
+    runner = CliRunner()
+    empty_notebook_dir = tmp_path / "empty"
+    empty_notebook_dir.mkdir()
+
+    command_outcome = runner.invoke(app, ["check", str(empty_notebook_dir)])
+
+    assert command_outcome.exit_code == 2
+    assert "no notebooks found in directory" in command_outcome.output
+
+
+def test_check_rejects_missing_path(tmp_path: Path) -> None:
+    runner = CliRunner()
+    missing_notebook = tmp_path / "missing.ipynb"
+
+    command_outcome = runner.invoke(app, ["check", str(missing_notebook)])
+
+    assert command_outcome.exit_code == 2
+    assert "does not exist" in command_outcome.output
+
+
+def test_check_reports_file_removed_after_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runner = CliRunner()
+    copied_notebook = tmp_path / "v45_clean.ipynb"
+    shutil.copyfile(FIXTURE_ROOT / "roundtrip" / "v45_clean.ipynb", copied_notebook)
+
+    def fail_read(_notebook_path: Path) -> object:
+        raise FileNotFoundError(str(copied_notebook))
+
+    monkeypatch.setattr(cli_module, "read_notebook", fail_read)
+
+    command_outcome = runner.invoke(app, ["check", str(copied_notebook)])
+
+    assert command_outcome.exit_code == 2
+    assert "file not found" in command_outcome.output
+
+
+def test_check_reports_unparseable_notebook_without_traceback(tmp_path: Path) -> None:
+    runner = CliRunner()
+    broken_notebook = tmp_path / "broken.ipynb"
+    broken_notebook.write_text(
+        '{"cells":[{"cell_type":"code","execution_count":1,"id":"broken",'
+        '"metadata":{"language":"python"},"outputs":[],"source":["if True\\n"]}],'
+        '"metadata":{"language_info":{"name":"python"}},"nbformat":4,"nbformat_minor":5}\n',
+        encoding="utf-8",
+    )
+
+    command_outcome = runner.invoke(app, ["check", str(broken_notebook)])
+
+    assert command_outcome.exit_code == 2
+    assert "error:" in command_outcome.output
+    assert "Failed to parse cell 1" in command_outcome.output
+    assert "Traceback" not in command_outcome.output
 
 
 def test_check_fix_reorder_rewrites_dag_and_clears_counts(tmp_path: Path) -> None:

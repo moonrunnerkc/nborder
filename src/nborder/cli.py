@@ -11,7 +11,7 @@ from nborder.fix.models import FixOutcome
 from nborder.fix.pipeline import plan_fix_pipeline
 from nborder.graph.builder import build_dataflow_graph
 from nborder.parser.models import Notebook
-from nborder.parser.reader import read_notebook
+from nborder.parser.reader import NotebookParseError, read_notebook
 from nborder.parser.writer import serialize_notebook, write_notebook
 from nborder.reporters.base import Reporter
 from nborder.reporters.github import GithubReporter
@@ -27,7 +27,6 @@ from nborder.rules.types import Diagnostic, Severity
 from nborder.rules.unresolved import classify_unresolved_uses
 
 _DEFAULT_INCLUDE_LEVELS: frozenset[Severity] = frozenset({"error", "warning"})
-_ALL_INCLUDE_LEVELS: frozenset[Severity] = frozenset({"error", "warning", "info"})
 
 _RULE_DOCS_DIR = Path(__file__).parent.parent.parent / "docs" / "rules"
 
@@ -45,13 +44,9 @@ def main() -> None:
 @app.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 def check(
     paths: Annotated[
-        list[str],
-        typer.Argument(help="Notebook files, directories, and --fix tokens to check."),
+        list[str], typer.Argument(help="Notebook files, directories, and --fix tokens.")
     ],
-    diff: Annotated[
-        bool,
-        typer.Option("--diff", help="Show safe-fix changes without writing files."),
-    ] = False,
+    diff: Annotated[bool, typer.Option("--diff", help="Show safe-fix changes.")] = False,
     include: Annotated[
         str | None,
         typer.Option(
@@ -67,19 +62,10 @@ def check(
         ),
     ] = "text",
     exit_zero: Annotated[
-        bool,
-        typer.Option("--exit-zero", help="Exit with code 0 even when diagnostics are present."),
+        bool, typer.Option("--exit-zero", help="Exit 0 with diagnostics.")
     ] = False,
 ) -> None:
-    """Check notebooks for hidden-state and execution-order bugs.
-
-    Args:
-        paths: Notebook files or directories to check, with manually parsed fix tokens.
-        diff: Whether to print the safe-fix diff without writing.
-        include: Diagnostic levels to include (comma-separated).
-        output_format: Reporter to use for diagnostic output.
-        exit_zero: Whether to exit with code 0 regardless of diagnostics.
-    """
+    """Check notebooks for hidden-state and execution-order bugs."""
     fix, parsed_paths = _parse_check_tokens(tuple(paths))
     notebooks = tuple(_iter_notebook_paths(parsed_paths))
     include_levels = _parse_include(include)
@@ -90,42 +76,57 @@ def check(
     fix_outcomes: list[FixOutcome] = []
 
     for notebook_path in notebooks:
-        config = load_config(notebook_path)
-        notebook = read_notebook(notebook_path)
-        notebook_diagnostics = _check_notebook(notebook, config, include_levels=include_levels)
+        try:
+            config = load_config(notebook_path)
+            notebook = read_notebook(notebook_path)
+            notebook_diagnostics = _check_notebook(notebook, config, include_levels=include_levels)
 
-        if enabled_fixes:
-            graph = build_dataflow_graph(notebook)
-            (
-                cell_order,
-                seed_cell_source,
-                clear_execution_counts,
-                notebook_fix_outcomes,
-            ) = plan_fix_pipeline(
-                notebook,
-                graph,
-                notebook_diagnostics,
-                enabled_fixes,
-                config.seeds,
-            )
-            fix_outcomes.extend(notebook_fix_outcomes)
-            if diff:
-                _write_diff(notebook, cell_order, seed_cell_source, clear_execution_counts)
-            elif cell_order is not None or seed_cell_source is not None or clear_execution_counts:
-                write_notebook(
+            if enabled_fixes:
+                graph = build_dataflow_graph(notebook)
+                (
+                    cell_order,
+                    seed_cell_source,
+                    clear_execution_counts,
+                    notebook_fix_outcomes,
+                ) = plan_fix_pipeline(
                     notebook,
-                    cell_order=cell_order,
-                    seed_cell_source=seed_cell_source,
-                    clear_execution_counts=clear_execution_counts,
+                    graph,
+                    notebook_diagnostics,
+                    enabled_fixes,
+                    config.seeds,
                 )
-                notebook = read_notebook(notebook_path)
-                notebook_diagnostics = _check_notebook(
-                    notebook, config, include_levels=include_levels
-                )
+                fix_outcomes.extend(notebook_fix_outcomes)
+                if diff:
+                    _write_diff(notebook, cell_order, seed_cell_source, clear_execution_counts)
+                elif (
+                    cell_order is not None
+                    or seed_cell_source is not None
+                    or clear_execution_counts
+                ):
+                    write_notebook(
+                        notebook,
+                        cell_order=cell_order,
+                        seed_cell_source=seed_cell_source,
+                        clear_execution_counts=clear_execution_counts,
+                    )
+                    notebook = read_notebook(notebook_path)
+                    notebook_diagnostics = _check_notebook(
+                        notebook, config, include_levels=include_levels
+                    )
 
-        diagnostics.extend(
-            _visible_diagnostics(notebook_diagnostics, include_levels=include_levels)
-        )
+            diagnostics.extend(
+                _visible_diagnostics(notebook_diagnostics, include_levels=include_levels)
+            )
+        except NotebookParseError as parse_error:
+            typer.echo(f"error: {notebook_path}: {parse_error}", err=True)
+            raise typer.Exit(code=2) from parse_error
+        except FileNotFoundError as missing_file:
+            failed_path = missing_file.filename or notebook_path
+            typer.echo(
+                f"error: {failed_path}: file not found; pass an existing notebook or directory.",
+                err=True,
+            )
+            raise typer.Exit(code=2) from missing_file
 
     visible_fix_outcomes = tuple(fix_outcomes) if enabled_fixes else None
     rendered_output = reporter.report(tuple(diagnostics), visible_fix_outcomes)
@@ -168,13 +169,29 @@ def _parse_check_tokens(tokens: tuple[str, ...]) -> tuple[str | None, tuple[Path
 
 
 def _iter_notebook_paths(paths: tuple[Path, ...]) -> tuple[Path, ...]:
+    if not paths:
+        raise typer.BadParameter("no paths provided; pass a notebook file or directory.")
     notebook_paths: list[Path] = []
     for check_path in paths:
+        if not check_path.exists():
+            raise typer.BadParameter(
+                f"path '{check_path}' does not exist; pass a notebook file or directory."
+            )
         if check_path.is_dir():
-            notebook_paths.extend(sorted(check_path.rglob("*.ipynb")))
+            discovered_notebooks = tuple(sorted(check_path.rglob("*.ipynb")))
+            if not discovered_notebooks:
+                typer.echo(f"no notebooks found in directory: {check_path}", err=True)
+                raise typer.Exit(code=2)
+            notebook_paths.extend(discovered_notebooks)
             continue
-        if check_path.suffix == ".ipynb":
-            notebook_paths.append(check_path)
+        if check_path.suffix != ".ipynb":
+            raise typer.BadParameter(
+                f"path '{check_path}' is not a .ipynb file; pass a notebook file or directory."
+            )
+        notebook_paths.append(check_path)
+    if not notebook_paths:
+        joined_paths = ", ".join(str(path) for path in paths)
+        raise typer.BadParameter(f"no notebooks found at: {joined_paths}")
     return tuple(notebook_paths)
 
 
@@ -200,14 +217,12 @@ def _check_notebook(
     ]
     return filter_suppressed_diagnostics(notebook, tuple(diagnostics))
 
-
 def _visible_diagnostics(
     diagnostics: tuple[Diagnostic, ...],
     *,
     include_levels: frozenset[Severity],
 ) -> tuple[Diagnostic, ...]:
     return tuple(diagnostic for diagnostic in diagnostics if diagnostic.severity in include_levels)
-
 
 def _enabled_fixes(fix: str | None, diff: bool) -> frozenset[str]:
     if diff:
@@ -217,7 +232,6 @@ def _enabled_fixes(fix: str | None, diff: bool) -> frozenset[str]:
     if fix == "all":
         return frozenset({"reorder", "seeds", "clear-counts"})
     return frozenset(fix_id.strip() for fix_id in fix.split(",") if fix_id.strip())
-
 
 def _parse_include(include: str | None) -> frozenset[Severity]:
     if include is None:
@@ -229,7 +243,6 @@ def _parse_include(include: str | None) -> frozenset[Severity]:
             case "error" | "warning" | "info":
                 extra_levels.add(normalized)
     return _DEFAULT_INCLUDE_LEVELS | extra_levels
-
 
 def _select_reporter(output_format: str) -> Reporter:
     if output_format == "text":
@@ -244,7 +257,6 @@ def _select_reporter(output_format: str) -> Reporter:
         f"unknown --output-format value '{output_format}'; "
         "expected one of: text, json, github, sarif."
     )
-
 
 def _write_diff(
     notebook: Notebook,
@@ -270,7 +282,6 @@ def _write_diff(
         tofile=str(notebook.path),
     ):
         typer.echo(diff_line, nl=False)
-
 
 def _format_config_toml(effective_config: Config) -> str:
     libraries_repr = ", ".join(f'"{library}"' for library in effective_config.seeds.libraries)
