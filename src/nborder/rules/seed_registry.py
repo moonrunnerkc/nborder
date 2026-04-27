@@ -27,9 +27,9 @@ class SeedProbe:
     diagnostic_message: str
 
 
-# NumPy accepts the legacy global seed API as already seeded, but the fixer only
-# injects the modern Generator API. That keeps old notebooks quiet without adding
-# new global RNG state to fixed notebooks.
+# NumPy seed injection covers both the legacy global RandomState used by
+# np.random.rand and friends and the modern Generator API. Reruns of fixed
+# notebooks must be byte-identical regardless of which API the user calls.
 SEED_PROBES: tuple[SeedProbe, ...] = (
     SeedProbe(
         library="numpy",
@@ -39,7 +39,7 @@ SEED_PROBES: tuple[SeedProbe, ...] = (
             CallPattern("attribute_exact", ("random.seed", "random.default_rng")),
             CallPattern("attribute_exact", ("seed", "default_rng")),
         ),
-        injection_template="rng = np.random.default_rng(SEED)",
+        injection_template="np.random.seed(SEED)\nrng = np.random.default_rng(SEED)",
         diagnostic_message="NumPy random API used before a seed is set.",
     ),
     SeedProbe(

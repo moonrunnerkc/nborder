@@ -44,9 +44,17 @@ def test_numpy_legacy_seed_counts_as_seeded() -> None:
     assert diagnostics == ()
 
 
-def test_numpy_modern_seed_counts_as_seeded() -> None:
+def test_numpy_generator_only_usage_does_not_fire() -> None:
     diagnostics = _nb103_diagnostics("numpy_modern_seeded.ipynb")
     assert diagnostics == ()
+
+
+def test_numpy_default_rng_does_not_seed_legacy_random_calls() -> None:
+    diagnostics = _nb103_diagnostics("numpy_default_rng_then_legacy.ipynb")
+    assert len(diagnostics) == 1
+    assert diagnostics[0].code == "NB103"
+    assert diagnostics[0].fix_descriptor is not None
+    assert diagnostics[0].fix_descriptor.description == "numpy"
 
 
 def test_torch_cuda_without_seed_fires_nb103() -> None:
@@ -88,7 +96,7 @@ def test_papermill_parameter_seed_counts_one_level_name_flow(tmp_path: Path) -> 
             parameter_source="seed = 42",
             logic_source=(
                 "import numpy as np\n"
-                "rng = np.random.default_rng(seed)\n"
+                "np.random.seed(seed)\n"
                 "values = np.random.rand(3)"
             ),
         ),
@@ -134,6 +142,7 @@ def test_seeds_fix_injects_numpy_cell_and_second_pass_is_noop(tmp_path: Path) ->
     rewritten_notebook = read_notebook(copied_notebook)
     assert rewritten_notebook.cells[0].source == (
         "import numpy as np\n"
+        "np.random.seed(42)\n"
         "rng = np.random.default_rng(42)\n"
     )
 
@@ -159,6 +168,7 @@ def test_seeds_fix_uses_user_alias_when_numpy_aliased_elsewhere(tmp_path: Path) 
     rewritten_notebook = read_notebook(copied_notebook)
     assert rewritten_notebook.cells[0].source == (
         "import numpy as numpy_lib\n"
+        "numpy_lib.random.seed(42)\n"
         "rng = numpy_lib.random.default_rng(42)\n"
     )
 
@@ -181,6 +191,7 @@ def test_seeds_fix_skips_import_when_parameters_cell_already_imported_library(
     assert "seeds: applied (numpy seed injected at cell 1)" in command_outcome.output
     rewritten_notebook = read_notebook(copied_notebook)
     assert rewritten_notebook.cells[1].source == (
+        "numpy_lib.random.seed(42)\n"
         "rng = numpy_lib.random.default_rng(42)\n"
     )
     assert len(rewritten_notebook.cells) == 3
@@ -219,6 +230,7 @@ def test_seeds_fix_injects_one_cell_for_multiple_libraries(tmp_path: Path) -> No
     assert len(rewritten_notebook.cells) == 2
     assert rewritten_notebook.cells[0].source == (
         "import numpy as np\n"
+        "np.random.seed(42)\n"
         "rng = np.random.default_rng(42)\n"
         "import torch\n"
         "torch.manual_seed(42)\n"
@@ -300,6 +312,7 @@ def test_seed_cell_inserts_after_parameters_cell(tmp_path: Path) -> None:
     assert [cell.cell_id for cell in rewritten_notebook.cells[:2]][0] == "params-insert"
     assert rewritten_notebook.cells[1].source == (
         "import numpy as np\n"
+        "np.random.seed(42)\n"
         "rng = np.random.default_rng(42)\n"
     )
 
@@ -337,6 +350,7 @@ def test_seeds_apply_when_reorder_bails(tmp_path: Path) -> None:
     rewritten_notebook = read_notebook(copied_notebook)
     assert rewritten_notebook.cells[0].source == (
         "import numpy as np\n"
+        "np.random.seed(42)\n"
         "rng = np.random.default_rng(42)\n"
     )
 
@@ -356,7 +370,11 @@ def test_seeds_insert_at_new_position_zero_after_reorder_applies() -> None:
     )
 
     assert cell_order is None
-    assert seed_cell_source == "import numpy as np\nrng = np.random.default_rng(42)\n"
+    assert seed_cell_source == (
+        "import numpy as np\n"
+        "np.random.seed(42)\n"
+        "rng = np.random.default_rng(42)\n"
+    )
     assert clear_counts is False
     assert outcomes[0].fix_id == "seeds"
 
@@ -366,6 +384,7 @@ def test_seeds_insert_at_new_position_zero_after_reorder_applies() -> None:
         rewritten_notebook = read_notebook(copied_notebook)
         assert rewritten_notebook.cells[0].source == (
             "import numpy as np\n"
+            "np.random.seed(42)\n"
             "rng = np.random.default_rng(42)\n"
         )
     finally:

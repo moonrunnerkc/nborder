@@ -25,7 +25,7 @@ def test_enabled_seed_probes_filters_by_configured_libraries() -> None:
     assert tuple(probe.library for probe in enabled) == ("numpy", "torch")
 
 
-def test_numpy_registry_detects_legacy_but_injects_modern_api() -> None:
+def test_numpy_registry_detects_legacy_and_injects_both_apis() -> None:
     numpy_probe = next(probe for probe in SEED_PROBES if probe.library == "numpy")
     seed_suffixes = {
         suffix
@@ -34,4 +34,6 @@ def test_numpy_registry_detects_legacy_but_injects_modern_api() -> None:
     }
 
     assert "random.seed" in seed_suffixes
-    assert numpy_probe.injection_template == "rng = np.random.default_rng(SEED)"
+    assert numpy_probe.injection_template == (
+        "np.random.seed(SEED)\nrng = np.random.default_rng(SEED)"
+    )

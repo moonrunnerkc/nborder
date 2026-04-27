@@ -39,7 +39,7 @@ def check_unseeded_stochastic_calls(
     """
     probes = enabled_seed_probes(seed_config.libraries)
     active_imports: dict[str, list[LibraryImport]] = {probe.library: [] for probe in probes}
-    seeded_libraries: set[str] = set()
+    seeded_kinds: dict[str, set[str]] = {probe.library: set() for probe in probes}
     emitted_libraries: set[str] = set()
     diagnostics: list[Diagnostic] = []
     parameter_names = _parameter_names(notebook, graph)
@@ -52,13 +52,20 @@ def check_unseeded_stochastic_calls(
             for library_imports in active_imports.values():
                 for library_import in library_imports:
                     if _is_seed_call(library_import, call_event, parameter_names):
-                        seeded_libraries.add(library_import.probe.library)
+                        seeded_kinds[library_import.probe.library].add(
+                            _seed_kind_for_call(library_import, call_event)
+                        )
 
             for library_name, library_imports in active_imports.items():
-                if library_name in seeded_libraries or library_name in emitted_libraries:
+                if library_name in emitted_libraries:
                     continue
                 stochastic_import = _matching_stochastic_import(library_imports, call_event)
                 if stochastic_import is None:
+                    continue
+                required_kind = _stochastic_required_kind(stochastic_import, call_event)
+                if required_kind is None:
+                    continue
+                if required_kind in seeded_kinds[library_name]:
                     continue
                 diagnostics.append(_diagnostic(notebook, graph, stochastic_import, call_event))
                 emitted_libraries.add(library_name)
@@ -148,6 +155,63 @@ def _matching_stochastic_import(
         ):
             return library_import
     return None
+
+
+def _seed_kind_for_call(library_import: LibraryImport, call_event: CallEvent) -> str:
+    """Classify a matched seed call by API class.
+
+    For numpy, ``np.random.seed(...)`` seeds the legacy global RandomState used by
+    ``np.random.rand`` and friends; ``np.random.default_rng(...)`` only seeds the
+    Generator instance it returns. The two kinds are tracked separately so a
+    legacy call site is not falsely accepted as seeded by a Generator setup.
+
+    Args:
+        library_import: The matched library import for the call.
+        call_event: The seed call event under inspection.
+
+    Returns:
+        ``"legacy"`` for numpy seed calls, ``"generator"`` for numpy default_rng,
+        ``"default"`` for every other library where seed kind is irrelevant.
+    """
+    if library_import.probe.library != "numpy":
+        return "default"
+    relative_name = _relative_call_name(library_import, call_event.name)
+    if relative_name in {"random.default_rng", "default_rng"}:
+        return "generator"
+    return "legacy"
+
+
+def _stochastic_required_kind(
+    library_import: LibraryImport,
+    call_event: CallEvent,
+) -> str | None:
+    """Return the seed kind required to consider this stochastic call seeded.
+
+    For numpy, every stochastic call goes through the legacy global RandomState
+    and therefore requires ``"legacy"`` seeding. The numpy seed-setup calls
+    themselves (``np.random.seed`` and ``np.random.default_rng``) match the
+    stochastic prefix pattern but are not real stochastic firings; they return
+    ``None`` so the rule does not flag them.
+
+    Args:
+        library_import: The matched library import for the stochastic call.
+        call_event: The candidate stochastic call event.
+
+    Returns:
+        The seed kind that satisfies this call, or ``None`` if the call should
+        not fire (e.g., it is itself a seed-setup call).
+    """
+    relative_name = _relative_call_name(library_import, call_event.name)
+    if library_import.probe.library == "numpy":
+        if relative_name in {
+            "random.seed",
+            "random.default_rng",
+            "seed",
+            "default_rng",
+        }:
+            return None
+        return "legacy"
+    return "default"
 
 
 def _matches_pattern(

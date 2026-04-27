@@ -167,7 +167,10 @@ def _seed_call_lines(
     graph: DataflowGraph,
 ) -> tuple[str, ...]:
     if library == "numpy":
-        return (f"rng = {alias}.random.default_rng({seed_value})",)
+        return (
+            f"{alias}.random.seed({seed_value})",
+            f"rng = {alias}.random.default_rng({seed_value})",
+        )
     if library == "random":
         return (f"{alias}.seed({seed_value})",)
     if library == "torch":
