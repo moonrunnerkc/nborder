@@ -17,6 +17,14 @@ def test_nb101_noqa_suppresses_execution_count_diagnostic() -> None:
     assert all(diagnostic.code != "NB101" for diagnostic in diagnostics)
 
 
+def test_nb101_noqa_suppresses_real_execution_count_diagnostic() -> None:
+    notebook = read_notebook(FIXTURE_ROOT / "suppression" / "NB101_with_counts.ipynb")
+
+    diagnostics = _check_notebook(notebook, Config(), include_levels=frozenset({"error", "info"}))
+
+    assert all(diagnostic.code != "NB101" for diagnostic in diagnostics)
+
+
 def test_nb102_noqa_suppresses_undefined_name_diagnostic() -> None:
     notebook = read_notebook(FIXTURE_ROOT / "suppression" / "NB102.ipynb")
 
@@ -47,3 +55,5 @@ def test_cell_level_noqa_suppresses_all_nborder_diagnostics() -> None:
     diagnostics = _check_notebook(notebook, Config(), include_levels=frozenset({"error", "info"}))
 
     assert diagnostics == ()
+
+
