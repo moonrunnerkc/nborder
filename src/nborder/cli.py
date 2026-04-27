@@ -242,6 +242,11 @@ def _parse_include(include: str | None) -> frozenset[Severity]:
         match normalized:
             case "error" | "warning" | "info":
                 extra_levels.add(normalized)
+            case _:
+                raise typer.BadParameter(
+                    f"unknown --include value '{normalized}'; "
+                    "expected one of: error, warning, info."
+                )
     return _DEFAULT_INCLUDE_LEVELS | extra_levels
 
 def _select_reporter(output_format: str) -> Reporter:

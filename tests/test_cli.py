@@ -78,6 +78,16 @@ def test_check_can_include_wildcard_info() -> None:
     assert "Possibly defined by wildcard import from numpy" in command_outcome.output
 
 
+def test_check_rejects_unknown_include_level() -> None:
+    runner = CliRunner()
+    notebook_path = FIXTURE_ROOT / "phase3" / "wildcard.ipynb"
+
+    command_outcome = runner.invoke(app, ["check", "--include=warn", str(notebook_path)])
+
+    assert command_outcome.exit_code == 2
+    assert "unknown --include value 'warn'" in command_outcome.output
+
+
 def test_check_rejects_non_notebook_file(tmp_path: Path) -> None:
     runner = CliRunner()
     python_file = tmp_path / "notebook.py"
