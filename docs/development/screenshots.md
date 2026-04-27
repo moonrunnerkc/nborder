@@ -1,27 +1,51 @@
-# Generating screenshots for nborder docs
+# Generating README screenshots
 
-Some marketing material and rule docs benefit from a static rendering of the CLI output. The recommended path is a small Pillow renderer; `charmbracelet/freeze` is intentionally avoided.
+The README screenshots come from a deterministic capture pipeline. This page covers how to regenerate them when a future release changes user-visible behavior.
 
-## Recommended: Pillow ANSI-to-PNG renderer
+## What the pipeline produces
 
-A ~50-line script that converts ANSI text to a dark-themed monospace PNG covers every screenshot use case in this repo. Capture the output to a file with `nborder check ... > out.txt 2>&1`, strip ANSI escapes, render onto a Pillow `Image` with a monospace font, and write a PNG. No subprocess kernel state, no flaky text rendering, no GPU dependency.
+| Image | Source | Renderer |
+|-------|--------|----------|
+| Terminal output (`nborder check`, `nborder rule`, `--select`) | Captured stdout to a `.txt` log | Pillow ANSI-aware renderer |
+| Notebook screenshots (cell layouts, NameError tracebacks) | `.ipynb` file | `jupyter nbconvert --to html` plus headless Chromium via Playwright |
 
-The renderer requires only `Pillow` from the dev environment; nothing new lands on `dev` extras.
+Two renderers, one tool each. Terminal output is text; the Pillow path renders it directly. Notebook output needs Jupyter's actual stylesheet (cell prompts, syntax highlighting, the red-tinted error block) so a hand-rolled layout looks fake to anyone who has used Jupyter; the headless Chromium path uses the real CSS.
 
-## Why not `charmbracelet/freeze`
+## Pillow ANSI-to-PNG renderer
 
-`charmbracelet/freeze` v0.2.0 segfaults reliably on Ubuntu 24.04 with kernel 6.17.0 inside the Go runtime memory allocator. It produces no diagnostic, just a SIGSEGV with no useful stack. Pinned older releases (v0.1.x) may still work but are not maintained, and pinning to an upstream version that has been deprecated is a maintenance trap.
+A ~140-line script (`tools/render_text_png.py` in the evidence bundle) that takes a text file, strips ANSI escapes, and renders to a Tokyo Night Storm PNG with a faux terminal chrome (three colored dots, centered title bar). Word-boundary wrap with a 2-space hanging indent on continuation lines. Default width 1400 pixels, which fits a 145-character `nborder` diagnostic line on one row.
 
-If you are running this on a different platform and want to use `freeze` anyway, validate first by running it once on a known-good input. If it segfaults, fall back to the Pillow path; do not spend time bisecting upstream Go runtime issues.
+```bash
+python tools/render_text_png.py logs/01_nb101_check.txt screenshots/01_nb101_terminal.png \
+    --title "nborder check"
+```
 
-## Why not headless browser screenshotting
+Dependencies: `Pillow`. No system fonts beyond DejaVu Sans Mono, which Ubuntu and most distros ship by default. The renderer falls back to PIL's bitmap font if DejaVu is missing.
 
-Spinning up a real terminal in `xvfb`, configuring `fontconfig`, and screenshotting the output works but adds significant CI weight: a half-gigabyte of fonts and a Chromium download for what amounts to rendering text. The Pillow path is faster and more deterministic.
+## Notebook screenshots via Playwright
 
-## Reproducing a screenshot
+`tools/render_notebook_html.py` runs `jupyter nbconvert --to html` against the input notebook, opens the generated HTML in headless Chromium at `device_scale_factor=2`, queries `document.body.scrollHeight`, resizes the viewport to fit, and screenshots the visible region. The `body.scrollHeight` step matters; `documentElement.scrollHeight` clamps to the viewport height and produces tall PNGs with empty trailing whitespace.
 
-1. Capture the CLI output: `nborder check tests/fixtures/NB103/numpy_unseeded.ipynb > /tmp/example.txt 2>&1`.
-2. Run the Pillow renderer against `/tmp/example.txt`.
-3. Drop the resulting PNG into `docs/screenshots/`.
+```bash
+playwright install chromium  # one-time setup
+python tools/render_notebook_html.py notebooks/_executed_NB201.ipynb \
+    screenshots/02_nb201_nameerror.png
+```
 
-The renderer script is not bundled with `nborder` itself; it is a developer-only tool kept out of the runtime surface.
+For NameError screenshots that need to match Restart-and-Run-All semantics (failing cell shows `In [N]:`, subsequent cells show `In [ ]:`), execute the notebook with `nbclient.NotebookClient(allow_errors=False)` after clearing all execution counts and outputs. `jupyter nbconvert --execute --allow-errors` continues past errors and assigns counts to subsequent cells, which is not what RRA actually does.
+
+Dependencies: `jupyter`, `nbconvert`, `playwright` plus its bundled Chromium (~150 MB). The Chromium download is one-time; subsequent runs reuse the cached binary.
+
+## Why not charmbracelet/freeze
+
+`charmbracelet/freeze` v0.2.0 segfaults reliably on Ubuntu 24.04 with kernel 6.17.0 in the Go runtime memory allocator. No diagnostic, just a SIGSEGV with no useful stack. Pinned older releases may work but are not maintained, and pinning to an upstream version that has been deprecated is a maintenance trap. The Pillow path produces equivalent output with no native dependencies.
+
+## Reproducing the README screenshots
+
+The full evidence-capture pipeline lives outside the repo at `~/nborder-evidence/` and runs against the locally installed wheel. To regenerate one screenshot:
+
+1. Capture the source: terminal output to a `.txt` log, or save the notebook with the right execution state.
+2. Run the appropriate renderer with the destination path under `docs/images/`.
+3. Stage and commit the PNG; the README references it by path.
+
+The renderers themselves are intentionally not bundled with nborder; they are developer tools, not runtime surface.
