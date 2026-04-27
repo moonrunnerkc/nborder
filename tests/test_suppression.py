@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from nborder.cli import _check_notebook
 from nborder.config import Config
 from nborder.parser.reader import read_notebook
+from nborder.rules.suppression import _suppressed_codes
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"
 
@@ -57,3 +59,8 @@ def test_cell_level_noqa_suppresses_all_nborder_diagnostics() -> None:
     assert diagnostics == ()
 
 
+def test_malformed_noqa_pragma_does_not_suppress_diagnostics() -> None:
+    notebook = read_notebook(FIXTURE_ROOT / "suppression" / "NB102.ipynb")
+    cell = replace(notebook.cells[0], source="print(missing_name)  # nborder: noqa NB102")
+
+    assert _suppressed_codes(cell) == ()

@@ -273,6 +273,11 @@ def test_rule_command_prints_fallback_when_doc_missing() -> None:
     assert "Documentation not yet available for NB999." in command_outcome.output
 
 
+def test_select_reporter_rejects_unknown_output_format() -> None:
+    with pytest.raises(Exception, match="unknown --output-format value 'xml'"):
+        cli_module._select_reporter("xml")
+
+
 def test_config_command_prints_effective_toml() -> None:
     runner = CliRunner()
 

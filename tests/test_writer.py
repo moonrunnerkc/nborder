@@ -7,7 +7,7 @@ from pathlib import Path
 from nborder.fix.pipeline import plan_fix_pipeline
 from nborder.graph.builder import build_dataflow_graph
 from nborder.parser.reader import read_notebook
-from nborder.parser.writer import write_notebook
+from nborder.parser.writer import _preserve_trailing_newline, serialize_notebook, write_notebook
 from nborder.rules.nb201 import check_use_before_assign
 from nborder.rules.unresolved import classify_unresolved_uses
 
@@ -23,6 +23,12 @@ def test_writer_preserves_clean_notebook_bytes(tmp_path: Path) -> None:
         write_notebook(notebook)
 
         assert filecmp.cmp(fixture_path, copied_notebook, shallow=False)
+
+
+def test_serializer_returns_raw_bytes_without_mutation() -> None:
+    notebook = read_notebook(FIXTURE_ROOT / "roundtrip" / "v45_clean.ipynb")
+
+    assert serialize_notebook(notebook) == notebook.raw_bytes
 
 
 def test_writer_preserves_real_world_notebook_bytes(tmp_path: Path) -> None:
@@ -79,3 +85,15 @@ def test_writer_mutation_path_reorders_and_clears_counts_across_minor_versions(
         )
 
         assert copied_notebook.read_bytes() == first_fix_bytes
+
+
+def test_preserve_trailing_newline_adds_missing_newline() -> None:
+    assert _preserve_trailing_newline(b"{}\n", "{}") == "{}\n"
+
+
+def test_preserve_trailing_newline_removes_added_newline() -> None:
+    assert _preserve_trailing_newline(b"{}", "{}\n") == "{}"
+
+
+def test_preserve_trailing_newline_leaves_matching_convention_unchanged() -> None:
+    assert _preserve_trailing_newline(b"{}", "{}") == "{}"

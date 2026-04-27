@@ -8,8 +8,10 @@ from typer.testing import CliRunner
 
 from nborder.cli import app
 from nborder.config import SeedConfig
+from nborder.fix import seeds as seed_fix
 from nborder.fix.pipeline import plan_fix_pipeline
 from nborder.graph.builder import build_dataflow_graph
+from nborder.graph.models import ImportBinding
 from nborder.parser.reader import read_notebook
 from nborder.parser.writer import write_notebook
 from nborder.rules.nb103 import check_unseeded_stochastic_calls
@@ -203,6 +205,51 @@ def test_seeds_fix_injects_one_cell_for_multiple_libraries(tmp_path: Path) -> No
         "import torch\n"
         "torch.manual_seed(42)\n"
     )
+
+
+def test_seed_call_lines_cover_stdlib_tensorflow_and_unknown_libraries() -> None:
+    notebook = read_notebook(FIXTURE_ROOT / "NB103" / "numpy_unseeded.ipynb")
+    graph = build_dataflow_graph(notebook)
+
+    assert seed_fix._seed_call_lines("random", "random", 123, graph) == ("random.seed(123)",)
+    assert seed_fix._seed_call_lines("tensorflow", "tf", 123, graph) == (
+        "tf.random.set_seed(123)",
+    )
+    assert seed_fix._seed_call_lines("unknown", "unknown", 123, graph) == ()
+
+
+def test_seed_alias_resolution_ignores_non_module_import_bindings() -> None:
+    from_import = ImportBinding(
+        module="numpy",
+        imported_name="random",
+        bound_name="random",
+        cell_index=0,
+        line=1,
+        column=1,
+        kind="from",
+    )
+    wrong_module = ImportBinding(
+        module="pandas",
+        imported_name=None,
+        bound_name="pd",
+        cell_index=0,
+        line=1,
+        column=1,
+        kind="import",
+    )
+    missing_bound_name = ImportBinding(
+        module="numpy",
+        imported_name=None,
+        bound_name=None,
+        cell_index=0,
+        line=1,
+        column=1,
+        kind="import",
+    )
+
+    assert seed_fix._alias_for_library(from_import, "numpy") is None
+    assert seed_fix._alias_for_library(wrong_module, "numpy") is None
+    assert seed_fix._alias_for_library(missing_bound_name, "numpy") is None
 
 
 def test_jax_seed_fix_is_noop() -> None:
