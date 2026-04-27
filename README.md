@@ -79,9 +79,11 @@ Run `nborder config` to print the effective merged configuration.
 
 **How do I suppress a false positive?** Add `# nborder: noqa` (suppress all rules in the cell) or `# nborder: noqa: NB201,NB102` (suppress specific rules) to any line in the cell.
 
-**What if I want to disable a rule entirely?** Rule selection lands in v0.2. For now, use `# nborder: noqa: NB201` to suppress a rule for one cell.
+**What if I want to scope nborder to a subset of rules?** Use `--select=<CODES>` on the CLI. For example, `nborder check --select=NB201,NB103 notebooks/` keeps only NB201 and NB103 diagnostics; NB101 and NB102 are filtered out. Cell-level suppression with `# nborder: noqa: NB201` still works for one-off exceptions.
 
-**What is on the roadmap?** v0.2 adds project-wide rule selection and the opt-in fresh-kernel `--reproduce` pass. The static linter remains the default path.
+**Is there a `pyproject.toml` block for rule selection?** Not yet. v0.2 adds a `[tool.nborder] select` table so a project can pin its rule set in version control. The CLI flag is the supported path until then.
+
+**What is on the roadmap?** v0.2 adds the `[tool.nborder] select` configuration table and the opt-in fresh-kernel `--reproduce` pass. The static linter remains the default path.
 
 ## Contributing
 
