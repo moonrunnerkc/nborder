@@ -6,6 +6,7 @@ from typing import Annotated
 
 import typer
 
+from nborder.check import check_notebook, filter_visible_diagnostics
 from nborder.config import Config, load_config
 from nborder.fix.models import FixOutcome
 from nborder.fix.pipeline import plan_fix_pipeline
@@ -18,13 +19,7 @@ from nborder.reporters.github import GithubReporter
 from nborder.reporters.jsonout import JsonReporter
 from nborder.reporters.sarif import SarifReporter
 from nborder.reporters.text import TextReporter
-from nborder.rules.nb101 import check_non_monotonic_execution_counts
-from nborder.rules.nb102 import check_restart_run_all
-from nborder.rules.nb103 import check_unseeded_stochastic_calls
-from nborder.rules.nb201 import check_use_before_assign
-from nborder.rules.suppression import filter_suppressed_diagnostics
 from nborder.rules.types import Diagnostic, Severity
-from nborder.rules.unresolved import classify_unresolved_uses
 
 _DEFAULT_INCLUDE_LEVELS: frozenset[Severity] = frozenset({"error", "warning"})
 
@@ -79,7 +74,7 @@ def check(
         try:
             config = load_config(notebook_path)
             notebook = read_notebook(notebook_path)
-            notebook_diagnostics = _check_notebook(notebook, config, include_levels=include_levels)
+            notebook_diagnostics = check_notebook(notebook, config, include_levels=include_levels)
 
             if enabled_fixes:
                 graph = build_dataflow_graph(notebook)
@@ -110,12 +105,12 @@ def check(
                         clear_execution_counts=clear_execution_counts,
                     )
                     notebook = read_notebook(notebook_path)
-                    notebook_diagnostics = _check_notebook(
+                    notebook_diagnostics = check_notebook(
                         notebook, config, include_levels=include_levels
                     )
 
             diagnostics.extend(
-                _visible_diagnostics(notebook_diagnostics, include_levels=include_levels)
+                filter_visible_diagnostics(notebook_diagnostics, include_levels=include_levels)
             )
         except NotebookParseError as parse_error:
             typer.echo(f"error: {notebook_path}: {parse_error}", err=True)
@@ -194,35 +189,6 @@ def _iter_notebook_paths(paths: tuple[Path, ...]) -> tuple[Path, ...]:
         raise typer.BadParameter(f"no notebooks found at: {joined_paths}")
     return tuple(notebook_paths)
 
-
-def _check_notebook(
-    notebook: Notebook,
-    config: Config,
-    *,
-    include_levels: frozenset[Severity],
-) -> tuple[Diagnostic, ...]:
-    graph = build_dataflow_graph(notebook)
-    classified_uses = classify_unresolved_uses(graph)
-    include_info = "info" in include_levels
-    diagnostics = [
-        *check_non_monotonic_execution_counts(notebook),
-        *check_use_before_assign(notebook, graph, classified_uses),
-        *check_unseeded_stochastic_calls(notebook, graph, config.seeds),
-        *check_restart_run_all(
-            notebook,
-            graph,
-            classified_uses,
-            include_wildcard_info=include_info,
-        ),
-    ]
-    return filter_suppressed_diagnostics(notebook, tuple(diagnostics))
-
-def _visible_diagnostics(
-    diagnostics: tuple[Diagnostic, ...],
-    *,
-    include_levels: frozenset[Severity],
-) -> tuple[Diagnostic, ...]:
-    return tuple(diagnostic for diagnostic in diagnostics if diagnostic.severity in include_levels)
 
 def _enabled_fixes(fix: str | None, diff: bool) -> frozenset[str]:
     if diff:
