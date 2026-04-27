@@ -38,7 +38,6 @@ That's it. The action installs `nborder` from PyPI, runs `nborder check --output
 |-------|---------|-------------|
 | `path` | `.` | Directory or file to scan. |
 | `fix` | `false` | When `true`, runs `nborder check --fix` instead of just checking. |
-| `select` | "" | Comma-separated rule codes to enable. Empty means all enabled rules. |
 
 ## Combining with auto-fix
 
