@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 import libcst as cst
+import pytest
 from nbformat.notebooknode import NotebookNode
 
 from nborder.graph.builder import build_dataflow_graph
@@ -73,6 +74,27 @@ def test_dataflow_graph_tracks_wildcard_import_cells_for_later_rules() -> None:
 
     assert graph.wildcard_import_cells == frozenset({0})
     assert Edge(source_cell=1, target_cell=0, symbol="sqrt") in graph.adjacency[1]
+
+
+def test_dataflow_graph_does_not_import_user_modules_for_wildcards(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    module_dir = tmp_path / "evil_pkg"
+    module_dir.mkdir()
+    side_effect_path = tmp_path / "imported.txt"
+    module_dir.joinpath("__init__.py").write_text(
+        f"from pathlib import Path\nPath({str(side_effect_path)!r}).write_text('imported')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    notebook = _notebook_from_sources(("from evil_pkg import *\nprint(stolen_name)",))
+
+    graph = build_dataflow_graph(notebook)
+
+    assert not side_effect_path.exists()
+    assert graph.wildcard_import_cells == frozenset({0})
+    assert [unresolved.symbol.name for unresolved in graph.unresolved_uses] == ["stolen_name"]
 
 
 def test_dataflow_graph_records_duplicate_cell_definitions_once_in_symbol_index() -> None:

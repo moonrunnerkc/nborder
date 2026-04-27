@@ -44,6 +44,9 @@ nborder = "nborder.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"nborder._rule_docs" = ["*.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

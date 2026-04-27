@@ -321,18 +321,13 @@ def test_check_exit_zero_returns_zero_with_diagnostics() -> None:
     assert "NB101" in command_outcome.output
 
 
-def test_rule_command_prints_documentation_when_present(tmp_path: Path) -> None:
-    docs_dir = Path(__file__).resolve().parents[1] / "docs" / "rules"
-    docs_dir.mkdir(parents=True, exist_ok=True)
-    rule_path = docs_dir / "TEST999.md"
-    rule_path.write_text("# TEST999 sample rule\n", encoding="utf-8")
-    try:
-        runner = CliRunner()
-        command_outcome = runner.invoke(app, ["rule", "TEST999"])
-        assert command_outcome.exit_code == 0
-        assert "TEST999 sample rule" in command_outcome.output
-    finally:
-        rule_path.unlink(missing_ok=True)
+def test_rule_command_prints_packaged_documentation() -> None:
+    runner = CliRunner()
+
+    command_outcome = runner.invoke(app, ["rule", "NB101"])
+
+    assert command_outcome.exit_code == 0
+    assert "# NB101: non-monotonic execution counts" in command_outcome.output
 
 
 def test_rule_command_prints_fallback_when_doc_missing() -> None:

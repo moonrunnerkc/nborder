@@ -20,12 +20,11 @@ from nborder.reporters.github import GithubReporter
 from nborder.reporters.jsonout import JsonReporter
 from nborder.reporters.sarif import SarifReporter
 from nborder.reporters.text import TextReporter
+from nborder.rule_docs import read_rule_doc
 from nborder.rules.types import Diagnostic, Severity
 
 _DEFAULT_INCLUDE_LEVELS: frozenset[Severity] = frozenset({"error", "warning"})
 _VALID_FIX_CATEGORIES = frozenset({"reorder", "seeds", "clear-counts"})
-
-_RULE_DOCS_DIR = Path(__file__).parent.parent.parent / "docs" / "rules"
 
 app = typer.Typer(help="Lint Jupyter notebooks for hidden-state and execution-order bugs.")
 
@@ -141,9 +140,9 @@ def check(
 @app.command()
 def rule(rule_code: Annotated[str, typer.Argument(help="Rule code (e.g., NB101).")]) -> None:
     """Print documentation for a single rule."""
-    rule_path = _RULE_DOCS_DIR / f"{rule_code.upper()}.md"
-    if rule_path.exists():
-        typer.echo(rule_path.read_text(encoding="utf-8"))
+    rule_doc = read_rule_doc(rule_code)
+    if rule_doc is not None:
+        typer.echo(rule_doc)
         return
     typer.echo(f"Documentation not yet available for {rule_code.upper()}.")
 
