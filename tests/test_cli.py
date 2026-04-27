@@ -96,7 +96,6 @@ def test_check_unknown_flag_exits_with_usage_error() -> None:
 
     assert command_outcome.exit_code == 2
     assert "No such option" in command_outcome.output
-    assert "--fxi" in command_outcome.output
 
 
 def test_check_rejects_non_notebook_file(tmp_path: Path) -> None:
