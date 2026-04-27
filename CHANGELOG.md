@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [0.1.4] - 2026-04-27
 
+### Migration note for users of 0.1.0 through 0.1.3
+
+If you ran `nborder check --fix` (or `--fix=seeds`) against a notebook that calls the legacy NumPy API (`np.random.rand`, `np.random.randint`, `np.random.randn`, etc.), the resulting "fixed" notebook may still be non-deterministic. The 0.1.0-0.1.3 injection emitted only `rng = np.random.default_rng(SEED)`, which seeds the returned Generator instance but does not seed the legacy global `RandomState` that `np.random.<func>` reads from. The static check then accepted `default_rng` as proof of seeding on the next pass and reported zero diagnostics.
+
+Re-run `nborder check --fix` against any affected notebook under 0.1.4. The 0.1.4 injection emits both `np.random.seed(SEED)` and the `default_rng` line; reruns of fixed notebooks are byte-identical for both APIs.
+
 ### Fixed
 
 - **NB103 (numpy correctness):** seed injection now seeds the legacy global RandomState used by `np.random.rand`, `np.random.randint`, `np.random.randn`, and friends in addition to the modern Generator API. Reruns of fixed notebooks are byte-identical for legacy, Generator-bound, and mixed call sites. Versions 0.1.0 through 0.1.3 silently produced non-deterministic notebooks under `--fix=seeds` for any cell that used the legacy `np.random.*` API.
