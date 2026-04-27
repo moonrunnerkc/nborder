@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-04-27
+
+### Fixed
+
+- **NB103 (numpy correctness):** seed injection now seeds the legacy global RandomState used by `np.random.rand`, `np.random.randint`, `np.random.randn`, and friends in addition to the modern Generator API. Reruns of fixed notebooks are byte-identical for legacy, Generator-bound, and mixed call sites. Versions 0.1.0 through 0.1.3 silently produced non-deterministic notebooks under `--fix=seeds` for any cell that used the legacy `np.random.*` API.
+- **NB103 (detector):** legacy and Generator API seeds are now tracked independently. A notebook containing `rng = np.random.default_rng(SEED)` followed by a later `np.random.rand(3)` correctly fires NB103 on the legacy call. Previously the detector treated `default_rng(...)` as seeding the entire library, producing a false green light on still-broken notebooks.
+
+### Added
+
+- **CLI:** `--select=<CODES>` flag filters diagnostics to the listed rule codes (e.g., `--select=NB101,NB103`). Unknown codes exit 2 with a clear error.
+- `docs/development/screenshots.md` documents the Pillow-based renderer used for static CLI screenshots and explains why `charmbracelet/freeze` is not the recommended path on Ubuntu 24.04.
+- `docs/integrations/github-actions.md` now warns about `tee` swallowing exit codes and shows the `set -o pipefail` and redirect alternatives.
+- Slow determinism test suite (`tests/test_nb103_determinism.py`, gated by `--run-slow`) executes fixed notebooks via `nbclient` and asserts byte-identical reruns for numpy legacy, numpy mixed legacy calls, and stdlib random.
+
 ## [0.1.3] - 2026-04-26
 
 ### Fixed
@@ -52,6 +66,7 @@ Initial public release.
 - **CLI flags**: `--fix`, `--diff`, `--output-format`, `--exit-zero`, `--include`. Subcommands: `check`, `rule <CODE>`, `config`.
 - **Configuration**: `[tool.nborder.seeds]` in `pyproject.toml` controls the seed value and the enabled library set.
 
+[0.1.4]: https://github.com/moonrunnerkc/nborder/releases/tag/v0.1.4
 [0.1.3]: https://github.com/moonrunnerkc/nborder/releases/tag/v0.1.3
 [0.1.2]: https://github.com/moonrunnerkc/nborder/releases/tag/v0.1.2
 [0.1.1]: https://github.com/moonrunnerkc/nborder/releases/tag/v0.1.1
