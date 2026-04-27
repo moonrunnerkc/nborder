@@ -1,7 +1,3 @@
-# Local planning and assistant instructions
-.github/BUILD_PLAN.md
-.github/copilot-instructions.md
-
 # Python bytecode and caches
 __pycache__/
 *.py[cod]
