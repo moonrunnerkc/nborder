@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-26
+
+### Fixed
+
+- Fix `--include` error message rendering on newer Typer versions; the message now reads "expected error, warning, info." instead of a generic Rich error frame.
+
 ## [0.1.1] - 2026-04-26
 
 ### Fixed
@@ -38,5 +44,6 @@ Initial public release.
 - **CLI flags**: `--fix`, `--diff`, `--output-format`, `--exit-zero`, `--include`. Subcommands: `check`, `rule <CODE>`, `config`.
 - **Configuration**: `[tool.nborder.seeds]` in `pyproject.toml` controls the seed value and the enabled library set.
 
+[0.1.2]: https://github.com/moonrunnerkc/nborder/releases/tag/v0.1.2
 [0.1.1]: https://github.com/moonrunnerkc/nborder/releases/tag/v0.1.1
 [0.1.0]: https://github.com/moonrunnerkc/nborder/releases/tag/v0.1.0
