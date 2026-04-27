@@ -12,4 +12,4 @@ jobs:
           python-version: "3.11"
       - uses: moonrunnerkc/nborder@v0.1.0
         with:
-          path: notebooks/
+          path: tests/fixtures/roundtrip
