@@ -37,7 +37,7 @@ jobs:
         run: mypy src
 
       - name: Run pytest
-        run: pytest
+        run: pytest --cov=nborder --cov-fail-under=70 --cov-report=term-missing
 
       - name: Self-test on clean roundtrip fixtures
         run: nborder check tests/fixtures/roundtrip
