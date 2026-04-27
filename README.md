@@ -2,6 +2,8 @@
 
 A fast, opinionated linter and auto-fixer for Jupyter notebook hidden-state and execution-order bugs.
 
+![nborder catches four classes of notebook bug in one pass](docs/images/hero.png)
+
 [![PyPI version](https://img.shields.io/pypi/v/nborder.svg)](https://pypi.org/project/nborder/)
 [![CI](https://github.com/moonrunnerkc/nborder/actions/workflows/ci.yml/badge.svg)](https://github.com/moonrunnerkc/nborder/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/pypi/pyversions/nborder.svg)](https://pypi.org/project/nborder/)
@@ -16,7 +18,41 @@ A fast, opinionated linter and auto-fixer for Jupyter notebook hidden-state and 
 | NB201 | Use-before-assign across cells      | Cell 0 uses `df`; `df = ...` only appears in cell 1. |
 | NB103 | Stochastic library used without seed | `np.random.rand(3)` runs with no seed call before it. |
 
-Each rule has a docs page under [`docs/rules/`](docs/rules/) explaining the bug class, a bad and good example, and the auto-fix behaviour.
+Each rule has a docs page under [`docs/rules/`](docs/rules/) explaining the bug class, a bad and good example, and the auto-fix behaviour. The four sections below walk through each rule with the diagnostic nborder actually emits.
+
+### NB101: out-of-order execution
+
+The `execution_count` field on each cell records the order Jupyter actually ran cells in, not the order they appear in the file. When those orders disagree, the recorded outputs reflect a hidden state nobody can recreate. NB101 walks the counts once and fires when they decrease.
+
+![NB101 diagnostic on a non-monotonic notebook](docs/images/nb101.png)
+
+`--fix=clear-counts` resets every `execution_count` to `null` so subsequent runs cannot disagree with the source order.
+
+### NB201: use before define
+
+Variables used in cell N but only defined in some later cell N+k. The notebook works in the user's live kernel because the later cell was run first; on Restart-and-Run-All it raises `NameError`. This is the failure mode that hides during interactive authoring and surfaces in CI or for the first reviewer.
+
+![Real Jupyter NameError when the broken notebook runs top-to-bottom](docs/images/nb201-nameerror.png)
+
+`--fix=reorder` topologically sorts the cells when the dependency graph is a DAG. After the fix the same Restart-and-Run-All executes cleanly.
+
+![nborder check on the same notebook flags NB201 and the precursor NB101](docs/images/nb201.png)
+
+### NB102: undefined name
+
+A name used somewhere in the notebook is never defined by any cell. The kernel works in interactive use because the user happened to define the name from a deleted cell; from a fresh kernel, `NameError` fires. NB102 has no auto-fix in 0.1.x because there is no general way to guess the intended name; the user fixes it by hand.
+
+![NB102 catches a typo`d reference before the runtime does](docs/images/nb102.png)
+
+### NB103: unseeded stochastic call
+
+Stochastic library APIs that run before any seed call. Reruns produce different numbers, downstream metrics drift, and reviewers cannot reproduce the notebook's claimed results. The 0.1.4 numpy injection seeds both the legacy global `RandomState` and the modern Generator API in two lines, so reruns of a fixed notebook are byte-identical regardless of which API the user actually calls.
+
+![NB103 fires on np.random.rand(3) before any seed is set](docs/images/nb103.png)
+
+After `--fix`, two `nbconvert --execute` runs produce identical floats:
+
+![Two seeded reruns of the fixed notebook produce identical output](docs/images/nb103-determinism.png)
 
 ## Quick start
 
@@ -36,7 +72,7 @@ Add this to your `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/moonrunnerkc/nborder
-    rev: v0.1.0
+    rev: v0.1.4
     hooks:
       - id: nborder
 ```
@@ -46,7 +82,7 @@ Then `pre-commit install`. Full setup notes in [`docs/integrations/pre-commit.md
 ## GitHub Actions
 
 ```yaml
-- uses: moonrunnerkc/nborder@v0.1.0
+- uses: moonrunnerkc/nborder@v0.1.4
   with:
     path: notebooks/
 ```
@@ -64,6 +100,18 @@ libraries = ["numpy", "torch", "tensorflow", "random"]
 ```
 
 Run `nborder config` to print the effective merged configuration.
+
+### Filtering rules with --select
+
+`--select=<CODES>` keeps only the listed rule codes in the diagnostic output. Useful for adopting a subset of rules, scoping a fix-up commit, or running a single rule in CI. Unknown codes exit 2 with a clear error.
+
+![--select=NB201 filters NB101 out of the same notebook](docs/images/select.png)
+
+## Rule documentation
+
+`nborder rule <CODE>` prints the rule's full documentation from the installed wheel. Useful when triaging a finding without leaving the terminal.
+
+![nborder rule NB101 renders the packaged rule docs](docs/images/rule-docs.png)
 
 ## FAQ
 
