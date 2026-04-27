@@ -47,7 +47,7 @@ Initial public release.
 - **Papermill conventions**: cells tagged `parameters` or `injected-parameters` define names at logical position zero in the dataflow graph. Cells tagged `nborder:skip` are excluded from analysis.
 - **`# nborder: noqa` suppression**: bare form suppresses all rules in the cell; `# nborder: noqa: NB201,NB102` suppresses listed codes.
 - **Pre-commit hook**: `.pre-commit-hooks.yaml` for adopters to register the `nborder` hook in their own repos.
-- **GitHub Action**: composite `action.yml` runs `nborder check --output-format=github` with optional `--fix` and `--select` inputs. Branding: `check-circle` icon, green colour.
+- **GitHub Action**: composite `action.yml` runs `nborder check --output-format=github` with an optional `--fix` input. Branding: `check-circle` icon, green colour.
 - **Reporters**: `text` (ruff-style with optional ANSI colour), `json` (stable schema), `github` (workflow commands), and `sarif` (validates against the SARIF 2.1.0 schema).
 - **CLI flags**: `--fix`, `--diff`, `--output-format`, `--exit-zero`, `--include`. Subcommands: `check`, `rule <CODE>`, `config`.
 - **Configuration**: `[tool.nborder.seeds]` in `pyproject.toml` controls the seed value and the enabled library set.
