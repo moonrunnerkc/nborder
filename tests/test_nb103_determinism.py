@@ -18,10 +18,15 @@ from pathlib import Path
 
 import nbformat
 import pytest
-from nbclient import NotebookClient
 from typer.testing import CliRunner
 
 from nborder.cli import app
+
+pytest.importorskip(
+    "nbclient",
+    reason="nbclient is only required when running the slow determinism suite",
+)
+from nbclient import NotebookClient  # noqa: E402
 
 
 def _execute_text_outputs(notebook_path: Path) -> str:
