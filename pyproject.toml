@@ -49,6 +49,9 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Import the package from the source tree, so the suite runs the same whether or
+# not the project itself is installed (for example after `uv sync --no-install-project`).
+pythonpath = ["src"]
 
 [tool.coverage.run]
 source = ["nborder"]
