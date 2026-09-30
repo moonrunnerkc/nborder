@@ -30,7 +30,7 @@ def filter_suppressed_diagnostics(
 def _is_suppressed(diagnostic: Diagnostic, suppressed_codes: tuple[str, ...] | None) -> bool:
     if suppressed_codes is None:
         return False
-    return "ALL" in suppressed_codes or diagnostic.code in suppressed_codes
+    return "ALL" in suppressed_codes
 
 
 def _suppressed_codes(cell: Cell) -> tuple[str, ...]:
